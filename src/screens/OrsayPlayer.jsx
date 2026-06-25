@@ -9,7 +9,7 @@ export default function OrsayPlayer({
   artwork, artworks, currentIndex, total,
   onPrev, onNext, onHome, onSelectIndex,
 }) {
-  const [snap, setSnap] = useState(1);        // 진입 시 중간
+  const [snap, setSnap] = useState(2);        // 진입 시 전체(지도+칩+스트립+버튼) 노출
   const [dragH, setDragH] = useState(null);   // 드래그 중 px, 평소 null
   const [tab, setTab] = useState('map');      // 'map' | 'list'
   const [autoplay, setAutoplay] = useState(false);
@@ -351,7 +351,7 @@ function FloorMapView({ artworks, currentIndex, roomStops, onPinClick }) {
   const current = artworks[currentIndex];
   const [floor, setFloor] = useState(current.floor || 1);
   const [imgErr, setImgErr] = useState(false);
-  const boxRef = useRef(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const chipsRef = useRef(null);
 
   // 현재 작품 층으로 자동 전환
@@ -367,52 +367,78 @@ function FloorMapView({ artworks, currentIndex, roomStops, onPinClick }) {
     () => roomStops.filter(s => s.floor === floor && pins[s.room]),
     [roomStops, floor, pins]
   );
-  // 경로선 점들 (seq 순서)
-  const routePts = floorStops.map(s => `${pins[s.room].x},${pins[s.room].y}`).join(' ');
-  // 현재 방(강조용)
   const currentRoom = current.room;
+  // 현재 순서(seq). 이 번호 이하 = 이미 지나간 것으로 표시.
+  const currentStop = roomStops.find(s => s.room === currentRoom && s.floor === current.floor);
+  const currentSeq = currentStop ? currentStop.seq : 0;
 
-  // 현재 stop 핀/칩을 보이게 자동 스크롤
-  useEffect(() => {
-    const box = boxRef.current;
-    const pos = pins[currentRoom];
-    if (box && pos && current.floor === floor) {
-      box.scrollTo({ top: Math.max(0, (pos.y / 100) * box.scrollHeight - box.clientHeight / 2), behavior: 'smooth' });
+  // 경로선: 지나간 구간(seq ≤ 현재)·앞으로 갈 구간(seq ≥ 현재) 분리.
+  // 핀 사이 "중간점"을 끼워넣어, 화살표(markerMid)가 핀에 가리지 않고 구간 가운데에 찍히도록 한다.
+  const densePts = (stops) => {
+    const c = stops.map(s => [pins[s.room].x, pins[s.room].y]);
+    if (c.length < 2) return '';
+    const out = [c[0]];
+    for (let i = 1; i < c.length; i++) {
+      out.push([(c[i - 1][0] + c[i][0]) / 2, (c[i - 1][1] + c[i][1]) / 2], c[i]);
     }
+    return out.map(p => `${p[0]},${p[1]}`).join(' ');
+  };
+  const traveledPts = densePts(floorStops.filter(s => s.seq <= currentSeq));
+  const upcomingPts = densePts(floorStops.filter(s => s.seq >= currentSeq));
+
+  // 현재 stop 칩을 가운데로 (지도는 한 화면에 다 보이므로 스크롤 불필요)
+  useEffect(() => {
     chipsRef.current?.querySelector('[data-active="1"]')?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
-  }, [currentRoom, floor, current.floor, pins]);
+  }, [currentRoom]);
+
+  const pinStyle = (s) => {
+    if (s.seq === currentSeq) return styles.pinOn;       // 현재
+    if (s.seq < currentSeq) return styles.pinVisited;    // 지나감
+    return null;                                         // 앞으로
+  };
+  const chipStyle = (s) => {
+    if (s.seq === currentSeq) return styles.roomChipOn;
+    if (s.seq < currentSeq) return styles.roomChipVisited;
+    return null;
+  };
 
   return (
     <div style={styles.floorWrap}>
-      {/* 층 전환 */}
-      <div style={styles.floorTabs}>
-        {floors.map(f => (
-          <button key={f}
-                  style={{ ...styles.floorTab, ...(f === floor ? styles.floorTabOn : {}) }}
-                  onClick={() => setFloor(f)}>
-            {orsayFloorMaps[f].label}
-          </button>
-        ))}
-      </div>
-
-      <div ref={boxRef} style={styles.floorImgBox}>
+      <div style={styles.floorImgBox}>
         {map && !imgErr ? (
           <div style={styles.floorCanvas}>
             <img src={map.src} alt={map.label} style={styles.floorImg} onError={() => setImgErr(true)} />
-            {/* 경로선 (1 → 2 → … 순서) */}
+            {/* 경로선: 지나간 구간(회색) → 앞으로 갈 구간(파랑) + 진행 방향 화살표 */}
             {floorStops.length > 1 && (
-              <svg style={styles.routeSvg} viewBox="0 0 100 100" preserveAspectRatio="none">
-                <polyline points={routePts} fill="none" stroke={BLUE} strokeWidth="0.7"
-                          strokeDasharray="2 1.6" strokeLinejoin="round" strokeLinecap="round" opacity="0.85" />
+              <svg style={styles.routeSvg} viewBox="0 0 100 100">
+                <defs>
+                  <marker id="arrB" viewBox="0 0 10 10" refX="6" refY="5" markerUnits="userSpaceOnUse"
+                          markerWidth="5.5" markerHeight="5.5" orient="auto">
+                    <path d="M0,1 L9,5 L0,9 z" fill={BLUE} />
+                  </marker>
+                  <marker id="arrG" viewBox="0 0 10 10" refX="6" refY="5" markerUnits="userSpaceOnUse"
+                          markerWidth="5.5" markerHeight="5.5" orient="auto">
+                    <path d="M0,1 L9,5 L0,9 z" fill="#b6bac6" />
+                  </marker>
+                </defs>
+                {upcomingPts && (
+                  <polyline points={upcomingPts} fill="none" stroke={BLUE} strokeWidth="0.9"
+                            strokeLinejoin="round" strokeLinecap="round" opacity="0.9"
+                            markerMid="url(#arrB)" />
+                )}
+                {traveledPts && (
+                  <polyline points={traveledPts} fill="none" stroke="#b6bac6" strokeWidth="1"
+                            strokeLinejoin="round" strokeLinecap="round" opacity="0.95"
+                            markerMid="url(#arrG)" />
+                )}
               </svg>
             )}
-            {/* 순서 핀 (방번호 대신 순서 번호) */}
+            {/* 순서 핀: 지나감(회색) · 현재(주황) · 앞으로(파랑) */}
             {floorStops.map(s => {
               const pos = pins[s.room];
-              const active = s.room === currentRoom;
               return (
                 <button key={s.room}
-                        style={{ ...styles.pin, left: `${pos.x}%`, top: `${pos.y}%`, ...(active ? styles.pinOn : {}) }}
+                        style={{ ...styles.pin, left: `${pos.x}%`, top: `${pos.y}%`, ...pinStyle(s) }}
                         onClick={() => onPinClick(s.idxs[0])}>
                   {s.seq}
                 </button>
@@ -428,18 +454,33 @@ function FloorMapView({ artworks, currentIndex, roomStops, onPinClick }) {
         )}
       </div>
 
+      {/* 층 선택 햄버거 (지도 왼쪽 아래 고정) */}
+      <div style={styles.floorFab}>
+        {menuOpen && (
+          <div style={styles.floorMenu}>
+            {floors.map(f => (
+              <button key={f}
+                      style={{ ...styles.floorMenuItem, ...(f === floor ? styles.floorMenuItemOn : {}) }}
+                      onClick={() => { setFloor(f); setMenuOpen(false); }}>
+                {orsayFloorMaps[f].label}
+              </button>
+            ))}
+          </div>
+        )}
+        <button style={styles.floorFabBtn} onClick={() => setMenuOpen(o => !o)}>
+          <span style={styles.floorFabIcon}>☰</span>{map ? map.label : `${floor}층`}
+        </button>
+      </div>
+
       {/* 순서 칩 (1번 ~ 마지막). 다른 층 stop 누르면 자동으로 그 층으로 전환됨 */}
       <div ref={chipsRef} style={styles.roomChips}>
-        {roomStops.map(s => {
-          const active = s.room === currentRoom;
-          return (
-            <button key={s.room} data-active={active ? '1' : '0'}
-                    style={{ ...styles.roomChip, ...(active ? styles.roomChipOn : {}) }}
-                    onClick={() => onPinClick(s.idxs[0])}>
-              {s.seq}
-            </button>
-          );
-        })}
+        {roomStops.map(s => (
+          <button key={s.room} data-active={s.seq === currentSeq ? '1' : '0'}
+                  style={{ ...styles.roomChip, ...chipStyle(s) }}
+                  onClick={() => onPinClick(s.idxs[0])}>
+            {s.seq}
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -537,13 +578,24 @@ const styles = {
 
   // 층 도면
   floorWrap: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' },
-  floorTabs: { display: 'flex', gap: 6, padding: 8, background: '#f4f5f8', flexShrink: 0 },
-  floorTab: { flex: 1, padding: '8px 4px', borderRadius: 8, border: '1px solid #e0e0e6', background: '#fff',
-    color: '#666', fontSize: 12, fontWeight: 600, cursor: 'pointer' },
-  floorTabOn: { background: BLUE, border: `1px solid ${BLUE}`, color: '#fff' },
-  floorImgBox: { position: 'relative', flex: 1, overflow: 'auto', background: '#fafbfc', minHeight: 0 },
-  floorCanvas: { position: 'relative', width: '100%', lineHeight: 0 },
-  floorImg: { display: 'block', width: '100%', height: 'auto' },
+  // 스크롤 없이 한 화면에: 도면을 박스 안에 맞춰 표시(정사각 캔버스, 중앙 정렬)
+  floorImgBox: { position: 'relative', flex: 1, overflow: 'hidden', background: '#fafbfc', minHeight: 0,
+    display: 'flex', alignItems: 'center', justifyContent: 'center' },
+
+  // 층 선택 햄버거 (지도 왼쪽 아래)
+  floorFab: { position: 'absolute', left: 10, bottom: 66, zIndex: 6, display: 'flex', flexDirection: 'column',
+    alignItems: 'flex-start', gap: 6 },
+  floorFabBtn: { display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 10,
+    background: 'rgba(26,26,46,0.92)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+    border: 'none', boxShadow: '0 2px 10px rgba(0,0,0,0.28)' },
+  floorFabIcon: { fontSize: 14, lineHeight: 1 },
+  floorMenu: { display: 'flex', flexDirection: 'column', gap: 4, background: '#fff', borderRadius: 10, padding: 5,
+    boxShadow: '0 4px 16px rgba(0,0,0,0.22)' },
+  floorMenuItem: { padding: '9px 16px', borderRadius: 8, border: 'none', background: '#f4f5f8', color: '#444',
+    fontSize: 13, fontWeight: 600, cursor: 'pointer', textAlign: 'left', whiteSpace: 'nowrap' },
+  floorMenuItemOn: { background: BLUE, color: '#fff' },
+  floorCanvas: { position: 'relative', height: '100%', aspectRatio: '1 / 1', maxWidth: '100%', lineHeight: 0 },
+  floorImg: { display: 'block', width: '100%', height: '100%', objectFit: 'contain' },
   floorPlaceholder: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center',
     justifyContent: 'center', gap: 6, color: '#9aa0ad' },
   floorPhIcon: { fontSize: 40 },
@@ -555,12 +607,14 @@ const styles = {
     boxShadow: '0 2px 6px rgba(0,0,0,0.3)', cursor: 'pointer', display: 'flex', alignItems: 'center',
     justifyContent: 'center', lineHeight: 1 },
   pinOn: { background: ORANGE, transform: 'translate(-50%,-50%) scale(1.3)', zIndex: 4 },
+  pinVisited: { background: '#b6bac6', border: '2px solid #eef0f5' },
 
   roomChips: { display: 'flex', gap: 8, overflowX: 'auto', padding: '10px 8px', flexShrink: 0, background: '#fff' },
   roomChip: { flexShrink: 0, width: 36, height: 36, borderRadius: '50%', border: '1px solid #e0e0e6', background: '#fff',
     color: '#555', fontSize: 14, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center',
     justifyContent: 'center', padding: 0 },
   roomChipOn: { background: ORANGE, border: `1px solid ${ORANGE}`, color: '#fff' },
+  roomChipVisited: { background: '#dfe1e8', border: '1px solid #dfe1e8', color: '#9298a6' },
 
   stripHeader: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 2px 2px', fontSize: 13,
     fontWeight: 700, color: '#1a1a2e', flexShrink: 0 },
