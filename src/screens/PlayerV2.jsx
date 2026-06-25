@@ -212,7 +212,7 @@ export default function PlayerV2({
 
       {/* ============ 지도 바텀시트 ============ */}
       <div style={{ ...styles.sheet, height: sheetH, transition: sheetTrans }}>
-        {/* 드래그 전용 핸들 영역 (탭과 분리) */}
+        {/* 드래그 전용 핸들 영역 */}
         <div
           style={styles.handleZone}
           onPointerDown={onDown}
@@ -222,35 +222,45 @@ export default function PlayerV2({
         >
           <div style={styles.grabber} />
         </div>
-        <div style={styles.tabsWrap}>
-          <div style={styles.tabs}>
-            <button style={{ ...styles.tab, ...(tab === 'map' ? styles.tabOn : {}) }} onClick={() => setTab('map')}>▥ 지도</button>
-            <button style={{ ...styles.tab, ...(tab === 'list' ? styles.tabOn : {}) }} onClick={() => setTab('list')}>☰ 목차</button>
-          </div>
-        </div>
 
         {tab === 'map' ? (
           <div style={styles.sheetBody}>
             {/* 지도 (구글맵) */}
             <div style={styles.mapBox}>
-              <MapView artworks={artworks} currentIndex={currentIndex} snap={snap} />
+              <MapView
+                artworks={artworks}
+                currentIndex={currentIndex}
+                snap={snap}
+                onPinClick={(i) => { onSelectIndex(i); setSnap(2); }}
+              />
+              <button style={styles.tocBtn} onClick={() => setTab('list')}>☰ 목차</button>
             </div>
 
             {/* 장소 썸네일 스트립 (위로 올렸을 때) */}
             {snap === 2 && (
               <>
                 <div style={styles.strip}>
-                  {artworks.map((a, i) => (
-                    <button key={a.id} style={styles.stripCard} onClick={() => onSelectIndex(i)}>
-                      <div style={styles.stripThumb}>
-                        <img src={a.imageSrc} alt={a.title} style={styles.stripImg}
-                             onError={e => { e.target.style.visibility = 'hidden'; }} />
-                        {i !== currentIndex && <span style={styles.lock}>🔒</span>}
-                        {i === currentIndex && <span style={styles.stripHeart}>♥</span>}
-                      </div>
-                      <div style={styles.stripName}>{a.title}</div>
-                    </button>
-                  ))}
+                  {artworks.map((a, i) => {
+                    const active = i === currentIndex;
+                    return (
+                      <button key={a.id} style={styles.stripCard} onClick={() => onSelectIndex(i)}>
+                        <div style={{ ...styles.stripThumb, ...(active ? styles.stripThumbOn : {}) }}>
+                          <img src={a.imageSrc} alt={a.title} style={styles.stripImg}
+                               onError={e => { e.target.style.visibility = 'hidden'; }} />
+                          {!active && <span style={styles.lock}>🔒</span>}
+                          {active && (
+                            <div style={styles.nowPlay}>
+                              <span style={{ ...styles.eqBar, animationDelay: '0s', height: 8 }} />
+                              <span style={{ ...styles.eqBar, animationDelay: '0.15s', height: 14 }} />
+                              <span style={{ ...styles.eqBar, animationDelay: '0.3s', height: 10 }} />
+                              <span style={styles.nowPlayTxt}>재생중</span>
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ ...styles.stripName, ...(active ? styles.stripNameOn : {}) }}>{a.title}</div>
+                      </button>
+                    );
+                  })}
                 </div>
                 <div style={styles.navBar}>
                   <button style={styles.navBtn} onClick={onPrev}>← 이전 장소</button>
@@ -262,6 +272,9 @@ export default function PlayerV2({
         ) : (
           /* 목차 리스트 */
           <div style={styles.listBody}>
+            <div style={styles.listTopBar}>
+              <button style={styles.tocBtnList} onClick={() => setTab('map')}>▥ 지도</button>
+            </div>
             {artworks.map((a, i) => (
               <button key={a.id}
                       style={{ ...styles.listItem, ...(i === currentIndex ? styles.listItemOn : {}) }}
@@ -305,13 +318,16 @@ function markerIcon(g, active) {
   };
 }
 
-function MapView({ artworks, currentIndex, snap }) {
+function MapView({ artworks, currentIndex, snap, onPinClick }) {
   const elRef = useRef(null);
   const mapRef = useRef(null);
   const markersRef = useRef([]);
   const userRef = useRef(null);
   const rendererRef = useRef(null);
+  const onPinRef = useRef(onPinClick);
   const [locating, setLocating] = useState(false);
+
+  useEffect(() => { onPinRef.current = onPinClick; });
 
   // wkb → 좌표 (null인 코스는 제외)
   const coords = useMemo(() => artworks.map(a => decodeWKBPoint(a.wkb)), [artworks]);
@@ -342,14 +358,16 @@ function MapView({ artworks, currentIndex, snap }) {
         styles: MAP_STYLES,
       });
       mapRef.current = map;
-      markersRef.current = valid.map(({ c, i }) =>
-        new g.maps.Marker({
+      markersRef.current = valid.map(({ c, i }) => {
+        const m = new g.maps.Marker({
           position: { lat: c.lat, lng: c.lon },
           map,
           zIndex: i === currentIndex ? 99 : 1,
           icon: markerIcon(g, i === currentIndex),
-        })
-      );
+        });
+        m.addListener('click', () => onPinRef.current?.(i));
+        return m;
+      });
     }
     return () => {
       cancelled = true;
@@ -508,11 +526,12 @@ const styles = {
   handleZone: { display: 'flex', alignItems: 'center', justifyContent: 'center', height: 34, cursor: 'grab',
     touchAction: 'none', flexShrink: 0 },
   grabber: { width: 52, height: 6, borderRadius: 6, background: '#bdbdc6' },
-  tabsWrap: { padding: '4px 16px 0', flexShrink: 0 },
-  tabs: { display: 'flex', gap: 8 },
-  tab: { flex: 1, padding: '10px', borderRadius: 10, border: 'none', background: '#f1f1f4', color: '#888',
-    fontSize: 14, fontWeight: 600, cursor: 'pointer' },
-  tabOn: { background: '#1a1a2e', color: '#fff' },
+  tocBtn: { position: 'absolute', top: 10, right: 10, zIndex: 5, padding: '7px 12px', borderRadius: 8,
+    background: 'rgba(26,26,46,0.92)', color: '#fff', fontSize: 12, fontWeight: 700,
+    boxShadow: '0 2px 8px rgba(0,0,0,0.28)' },
+  listTopBar: { position: 'sticky', top: 0, zIndex: 1, display: 'flex', justifyContent: 'flex-end',
+    padding: '2px 6px 8px', background: '#fff' },
+  tocBtnList: { padding: '7px 12px', borderRadius: 8, background: '#1a1a2e', color: '#fff', fontSize: 12, fontWeight: 700 },
 
   sheetBody: { flex: 1, display: 'flex', flexDirection: 'column', padding: '12px 16px 16px', overflow: 'hidden', minHeight: 0 },
   mapBox: { position: 'relative', flex: 1, borderRadius: 12, overflow: 'hidden', minHeight: 120, background: '#e8eaf0' },
@@ -522,12 +541,19 @@ const styles = {
 
   strip: { display: 'flex', gap: 10, overflowX: 'auto', padding: '12px 0 4px', flexShrink: 0 },
   stripCard: { flexShrink: 0, width: 92, background: 'none', border: 'none', padding: 0, cursor: 'pointer' },
-  stripThumb: { position: 'relative', width: 92, height: 72, borderRadius: 8, overflow: 'hidden', background: '#e5e5ea' },
+  stripThumb: { position: 'relative', width: 92, height: 72, borderRadius: 8, overflow: 'hidden', background: '#e5e5ea',
+    border: '2px solid transparent' },
+  stripThumbOn: { border: '3px solid #F2994A', boxShadow: '0 0 0 3px rgba(242,153,74,0.25)' },
   stripImg: { width: '100%', height: '100%', objectFit: 'cover' },
   lock: { position: 'absolute', top: 6, right: 6, fontSize: 11 },
-  stripHeart: { position: 'absolute', bottom: 6, left: 6, fontSize: 13, color: '#ff5a7a' },
+  nowPlay: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
+    background: 'rgba(0,0,0,0.42)' },
+  eqBar: { width: 3, background: '#fff', borderRadius: 2, transformOrigin: 'bottom',
+    animation: 'eq 0.8s ease-in-out infinite' },
+  nowPlayTxt: { position: 'absolute', bottom: 5, fontSize: 9, fontWeight: 700, color: '#fff', letterSpacing: 0.5 },
   stripName: { fontSize: 11, color: '#444', marginTop: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
     textAlign: 'left' },
+  stripNameOn: { color: '#F2994A', fontWeight: 700 },
 
   navBar: { display: 'flex', gap: 10, marginTop: 10, flexShrink: 0 },
   navBtn: { flex: 1, padding: '14px', borderRadius: 12, border: '1px solid #e0e0e6', background: '#fff', color: '#555',
