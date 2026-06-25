@@ -1,6 +1,6 @@
 import { tourData } from '../data/tourData';
 
-export default function StartScreen({ onStart }) {
+export default function StartScreen({ onStart, onStart2 }) {
   const { artworks } = tourData;
   const totalMin = artworks.reduce((sum, a) => {
     const m = a.duration.match(/(\d+):(\d+):(\d+)/);
@@ -67,6 +67,9 @@ export default function StartScreen({ onStart }) {
 
       <button style={styles.startBtn} onClick={onStart}>
         투어 시작하기
+      </button>
+      <button style={styles.startBtn2} onClick={onStart2}>
+        투어 시작하기 2
       </button>
       <p style={styles.hint}>이어폰을 연결하면 더 좋아요 🎧</p>
     </div>
@@ -198,6 +201,17 @@ const styles = {
     fontSize: 17,
     fontWeight: 700,
     boxShadow: '0 4px 16px rgba(79,111,232,0.35)',
+    marginBottom: 12,
+  },
+  startBtn2: {
+    width: '100%',
+    padding: '18px',
+    borderRadius: 16,
+    background: '#fff',
+    color: '#4F6FE8',
+    fontSize: 17,
+    fontWeight: 700,
+    border: '2px solid #4F6FE8',
     marginBottom: 12,
   },
   hint: {
