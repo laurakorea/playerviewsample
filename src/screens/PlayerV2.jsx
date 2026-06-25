@@ -141,12 +141,20 @@ export default function PlayerV2({
         {/* 상단 바 */}
         <div style={styles.topBar}>
           <button style={styles.iconBtn} onClick={onHome}>⌄</button>
-          <button
-            style={{ ...styles.autoPill, ...(autoplay ? styles.autoPillOn : {}) }}
-            onClick={() => setAutoplay(a => !a)}
-          >
-            자동재생 {autoplay ? 'on' : 'off'}
-          </button>
+          <div style={styles.topRight}>
+            {!isFull && (
+              <>
+                <button style={styles.topChip}>💬 댓글</button>
+                <button style={styles.topChip}>📄 스크립트</button>
+              </>
+            )}
+            <button
+              style={{ ...styles.autoPill, ...(autoplay ? styles.autoPillOn : {}) }}
+              onClick={() => setAutoplay(a => !a)}
+            >
+              자동재생 {autoplay ? 'on' : 'off'}
+            </button>
+          </div>
         </div>
 
         {isFull ? (
@@ -469,6 +477,10 @@ const styles = {
   topBar: { position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     padding: '10px 16px', background: 'linear-gradient(rgba(0,0,0,0.45), transparent)' },
   iconBtn: { background: 'none', border: 'none', color: W, fontSize: 24, lineHeight: 1, cursor: 'pointer', width: 32 },
+  topRight: { display: 'flex', alignItems: 'center', gap: 8 },
+  topChip: { display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.42)',
+    border: '1px solid rgba(255,255,255,0.25)', color: '#fff', fontSize: 12, padding: '5px 10px', borderRadius: 20,
+    cursor: 'pointer', whiteSpace: 'nowrap' },
   autoPill: { background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)', color: 'rgba(255,255,255,0.7)',
     fontSize: 12, padding: '5px 12px', borderRadius: 20, cursor: 'pointer' },
   autoPillOn: { background: 'rgba(79,111,232,0.25)', borderColor: '#4F6FE8', color: '#9db0ff' },

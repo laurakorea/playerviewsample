@@ -69,7 +69,7 @@ export default function NavigationScreen({ currentArtwork, nextArtwork, onArrive
       });
       mapInstanceRef.current = map;
 
-      // 다음 작품 마커 (주황색)
+      // 다음 장소 마커 (주황색)
       new google.maps.Marker({
         position: nextLatLng,
         map,
@@ -95,7 +95,30 @@ export default function NavigationScreen({ currentArtwork, nextArtwork, onArrive
       });
       dirRendererRef.current = renderer;
 
-      // 자동으로 현재 위치 가져와서 경로 표시
+      // 이전 장소 → 다음 장소 경로 연결
+      if (currentCoord) {
+        const prevLatLng = { lat: currentCoord.lat, lng: currentCoord.lon };
+        new google.maps.Marker({
+          position: prevLatLng,
+          map,
+          title: currentArtwork?.title,
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 9,
+            fillColor: '#94A3B8',
+            fillOpacity: 1,
+            strokeColor: '#fff',
+            strokeWeight: 2.5,
+          },
+        });
+        requestRoute(google, map, renderer, prevLatLng, nextLatLng, () => cancelled);
+        const bounds = new google.maps.LatLngBounds();
+        bounds.extend(prevLatLng);
+        bounds.extend(nextLatLng);
+        map.fitBounds(bounds, { top: 70, bottom: 70, left: 50, right: 50 });
+      }
+
+      // 현재 위치 마커 (경로는 변경하지 않고 표시만)
       if (navigator.geolocation) {
         setLocating(true);
         navigator.geolocation.getCurrentPosition(
@@ -103,7 +126,6 @@ export default function NavigationScreen({ currentArtwork, nextArtwork, onArrive
             if (cancelled) return;
             setLocating(false);
             const myLatLng = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-
             currMarkerRef.current = new google.maps.Marker({
               position: myLatLng,
               map,
@@ -117,19 +139,8 @@ export default function NavigationScreen({ currentArtwork, nextArtwork, onArrive
                 strokeWeight: 2.5,
               },
             });
-
-            const d = distanceMeters(
-              { lat: pos.coords.latitude, lon: pos.coords.longitude },
-              { lat: nextCoord.lat, lon: nextCoord.lon }
-            );
-            setDistDisplay(formatDistance(d));
-
-            requestRoute(google, map, renderer, myLatLng, nextLatLng, () => cancelled);
-
-            const bounds = new google.maps.LatLngBounds();
-            bounds.extend(myLatLng);
-            bounds.extend(nextLatLng);
-            map.fitBounds(bounds, { top: 60, bottom: 60, left: 40, right: 40 });
+            // 이전 좌표가 없을 때(첫 코스)만 내 위치로 이동
+            if (!currentCoord) map.panTo(myLatLng);
           },
           () => {
             if (cancelled) return;
@@ -184,7 +195,6 @@ export default function NavigationScreen({ currentArtwork, nextArtwork, onArrive
         if (!google || !map || !nextCoord) return;
 
         const myLatLng = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        const nextLatLng = { lat: nextCoord.lat, lng: nextCoord.lon };
 
         // 현재 위치 마커 업데이트
         if (currMarkerRef.current) {
@@ -212,16 +222,8 @@ export default function NavigationScreen({ currentArtwork, nextArtwork, onArrive
         );
         setDistDisplay(formatDistance(d));
 
-        // 경로 재계산
-        if (dirRendererRef.current) {
-          requestRoute(google, map, dirRendererRef.current, myLatLng, nextLatLng, () => false);
-        }
-
-        // 두 마커 모두 보이게
-        const bounds = new google.maps.LatLngBounds();
-        bounds.extend(myLatLng);
-        bounds.extend(nextLatLng);
-        map.fitBounds(bounds, { top: 60, bottom: 60, left: 40, right: 40 });
+        // 이전→다음 경로는 유지하고, 내 위치로만 이동
+        map.panTo(myLatLng);
       },
       (err) => {
         setLocating(false);
