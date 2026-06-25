@@ -255,6 +255,7 @@ export default function PlayerV2({
                         <div style={{ ...styles.stripThumb, ...(active ? styles.stripThumbOn : {}) }}>
                           <img src={a.imageSrc} alt={a.title} style={styles.stripImg}
                                onError={e => { e.target.style.visibility = 'hidden'; }} />
+                          <span style={{ ...styles.stripNo, ...(active ? styles.stripNoOn : {}) }}>{i + 1}</span>
                           {!active && <span style={styles.lock}>🔒</span>}
                           {active && (
                             <div style={styles.nowPlay}>
@@ -318,7 +319,7 @@ function Controls({ big, isPlaying, onPlay, onPrev, onNext, onNudge }) {
 function markerIcon(g, active) {
   return {
     path: g.maps.SymbolPath.CIRCLE,
-    scale: active ? 11 : 7,
+    scale: active ? 15 : 12,
     fillColor: active ? '#F2994A' : '#4F6FE8',
     fillOpacity: 1,
     strokeColor: '#fff',
@@ -330,6 +331,7 @@ function MapView({ artworks, currentIndex, snap, onPinClick }) {
   const elRef = useRef(null);
   const mapRef = useRef(null);
   const markersRef = useRef([]);
+  const routeRef = useRef(null);
   const userRef = useRef(null);
   const rendererRef = useRef(null);
   const onPinRef = useRef(onPinClick);
@@ -337,8 +339,19 @@ function MapView({ artworks, currentIndex, snap, onPinClick }) {
 
   useEffect(() => { onPinRef.current = onPinClick; });
 
-  // wkb → 좌표 (null인 코스는 제외)
-  const coords = useMemo(() => artworks.map(a => decodeWKBPoint(a.wkb)), [artworks]);
+  // wkb → 좌표. 좌표 없는 코스(인사말/마무리)는 인접 코스 위치를 물려받아
+  // 경로가 1번부터 끊김 없이 이어지게 한다. (물려받은 마커는 살짝 옮겨 겹침 방지)
+  const seq = useMemo(() => {
+    const raw = artworks.map(a => decodeWKBPoint(a.wkb));
+    const filled = raw.slice();
+    for (let i = 0; i < filled.length; i++) if (!filled[i] && i > 0) filled[i] = filled[i - 1];
+    for (let i = filled.length - 1; i >= 0; i--) if (!filled[i] && i < filled.length - 1) filled[i] = filled[i + 1];
+    return filled.map((c, i) => {
+      if (!c) return null;
+      if (!raw[i]) return { lat: c.lat + 0.00022, lon: c.lon + 0.00022 };
+      return c;
+    });
+  }, [artworks]);
 
   // 지도 초기화 (탭/마운트 시 1회)
   useEffect(() => {
@@ -354,9 +367,9 @@ function MapView({ artworks, currentIndex, snap, onPinClick }) {
 
     function init() {
       const g = window.google;
-      const valid = coords.map((c, i) => ({ c, i })).filter(x => x.c);
-      if (!valid.length) return;
-      const center = coords[currentIndex] || valid[0].c;
+      const pts = seq.map((c, i) => ({ c, i })).filter(x => x.c);
+      if (!pts.length) return;
+      const center = seq[currentIndex] || pts[0].c;
       const map = new g.maps.Map(elRef.current, {
         center: { lat: center.lat, lng: center.lon },
         zoom: 16,
@@ -366,21 +379,40 @@ function MapView({ artworks, currentIndex, snap, onPinClick }) {
         styles: MAP_STYLES,
       });
       mapRef.current = map;
-      markersRef.current = valid.map(({ c, i }) => {
+
+      // 경로 선 (1 → 2 → … → 끝)
+      routeRef.current = new g.maps.Polyline({
+        path: pts.map(({ c }) => ({ lat: c.lat, lng: c.lon })),
+        map,
+        strokeColor: '#4F6FE8',
+        strokeOpacity: 0.75,
+        strokeWeight: 3,
+      });
+
+      // 번호 매긴 마커 (1부터)
+      markersRef.current = pts.map(({ c, i }) => {
+        const active = i === currentIndex;
         const m = new g.maps.Marker({
           position: { lat: c.lat, lng: c.lon },
           map,
-          zIndex: i === currentIndex ? 99 : 1,
-          icon: markerIcon(g, i === currentIndex),
+          zIndex: active ? 99 : i + 1,
+          icon: markerIcon(g, active),
+          label: { text: String(i + 1), color: active ? '#3a2008' : '#fff', fontSize: '11px', fontWeight: '700' },
         });
         m.addListener('click', () => onPinRef.current?.(i));
-        return m;
+        return { m, i };
       });
+
+      // 전체 경로가 보이도록 맞춤
+      const bounds = new g.maps.LatLngBounds();
+      pts.forEach(({ c }) => bounds.extend({ lat: c.lat, lng: c.lon }));
+      map.fitBounds(bounds, { top: 50, bottom: 50, left: 40, right: 40 });
     }
     return () => {
       cancelled = true;
       mapRef.current = null;
       markersRef.current = [];
+      routeRef.current = null;
       userRef.current = null;
       rendererRef.current = null;
     };
@@ -390,13 +422,13 @@ function MapView({ artworks, currentIndex, snap, onPinClick }) {
   useEffect(() => {
     const g = window.google, map = mapRef.current;
     if (!g || !map) return;
-    const valid = coords.map((c, i) => ({ c, i })).filter(x => x.c);
-    markersRef.current.forEach((m, k) => {
-      const active = valid[k]?.i === currentIndex;
+    markersRef.current.forEach(({ m, i }) => {
+      const active = i === currentIndex;
       m.setIcon(markerIcon(g, active));
-      m.setZIndex(active ? 99 : 1);
+      m.setZIndex(active ? 99 : i + 1);
+      m.setLabel({ text: String(i + 1), color: active ? '#3a2008' : '#fff', fontSize: '11px', fontWeight: '700' });
     });
-    const c = coords[currentIndex];
+    const c = seq[currentIndex];
     if (c) map.panTo({ lat: c.lat, lng: c.lon });
   }, [currentIndex]);
 
@@ -406,7 +438,7 @@ function MapView({ artworks, currentIndex, snap, onPinClick }) {
     if (!g || !map) return;
     const t = setTimeout(() => {
       g.maps.event.trigger(map, 'resize');
-      const c = coords[currentIndex];
+      const c = seq[currentIndex];
       if (c) map.setCenter({ lat: c.lat, lng: c.lon });
     }, 360);
     return () => clearTimeout(t);
@@ -439,7 +471,7 @@ function MapView({ artworks, currentIndex, snap, onPinClick }) {
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setLocating(false);
-        const g = window.google, map = mapRef.current, dest = coords[currentIndex];
+        const g = window.google, map = mapRef.current, dest = seq[currentIndex];
         if (!g || !map || !dest) return;
         const origin = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         if (!rendererRef.current) rendererRef.current = new g.maps.DirectionsRenderer({
@@ -557,6 +589,10 @@ const styles = {
     border: '2px solid transparent' },
   stripThumbOn: { border: '3px solid #F2994A', boxShadow: '0 0 0 3px rgba(242,153,74,0.25)' },
   stripImg: { width: '100%', height: '100%', objectFit: 'cover' },
+  stripNo: { position: 'absolute', top: 4, left: 4, zIndex: 2, minWidth: 16, height: 16, padding: '0 4px',
+    borderRadius: 8, background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: 10, fontWeight: 700,
+    display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  stripNoOn: { background: '#F2994A' },
   lock: { position: 'absolute', top: 6, right: 6, fontSize: 11 },
   nowPlay: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
     background: 'rgba(0,0,0,0.42)' },
