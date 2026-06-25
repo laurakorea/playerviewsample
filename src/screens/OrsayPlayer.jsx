@@ -384,7 +384,22 @@ function FloorMapView({ artworks, currentIndex, roomStops, onPinClick }) {
     return out.map(p => `${p[0]},${p[1]}`).join(' ');
   };
   const traveledPts = densePts(floorStops.filter(s => s.seq <= currentSeq));
-  const upcomingPts = densePts(floorStops.filter(s => s.seq >= currentSeq));
+  const upcomingPts = densePts(floorStops.filter(s => s.seq >= currentSeq + 1));
+
+  // 현재 → 다음 구간 (개미행렬 애니메이션 + 발자국). 같은 층일 때만 선으로 표시.
+  const segFrom = floorStops.find(s => s.seq === currentSeq);
+  const segTo = floorStops.find(s => s.seq === currentSeq + 1);
+  const nextGlobal = roomStops.find(s => s.seq === currentSeq + 1);
+  let seg = null, footPos = null, crossFloor = null;
+  if (segFrom && segTo) {
+    const a = pins[segFrom.room], b = pins[segTo.room];
+    seg = `${a.x},${a.y} ${b.x},${b.y}`;
+    footPos = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  } else if (segFrom && nextGlobal && nextGlobal.floor !== floor) {
+    // 다음 장소가 다른 층 → 현재 핀 옆에 층 이동 안내
+    const a = pins[segFrom.room];
+    crossFloor = { x: a.x, y: a.y, label: orsayFloorMaps[nextGlobal.floor]?.label || `${nextGlobal.floor}층` };
+  }
 
   // 현재 stop 칩을 가운데로 (지도는 한 화면에 다 보이므로 스크롤 불필요)
   useEffect(() => {
@@ -431,6 +446,13 @@ function FloorMapView({ artworks, currentIndex, roomStops, onPinClick }) {
                             strokeLinejoin="round" strokeLinecap="round" opacity="0.95"
                             markerMid="url(#arrG)" />
                 )}
+                {/* 현재 → 다음: 점선이 다음 쪽으로 흐르는 개미행렬 */}
+                {seg && (
+                  <polyline points={seg} fill="none" stroke={BLUE} strokeWidth="1.4"
+                            strokeDasharray="2.4 2.4" strokeLinecap="round">
+                    <animate attributeName="stroke-dashoffset" values="9.6;0" dur="0.55s" repeatCount="indefinite" />
+                  </polyline>
+                )}
               </svg>
             )}
             {/* 순서 핀: 지나감(회색) · 현재(주황) · 앞으로(파랑) */}
@@ -444,6 +466,16 @@ function FloorMapView({ artworks, currentIndex, roomStops, onPinClick }) {
                 </button>
               );
             })}
+            {/* 다음 가는 길 발자국 */}
+            {footPos && (
+              <div style={{ ...styles.foot, left: `${footPos.x}%`, top: `${footPos.y}%` }}>👣</div>
+            )}
+            {/* 다음 장소가 다른 층이면 층 이동 안내 */}
+            {crossFloor && (
+              <div style={{ ...styles.crossFloor, left: `${crossFloor.x}%`, top: `${crossFloor.y}%` }}>
+                다음 {crossFloor.label} ↗
+              </div>
+            )}
           </div>
         ) : (
           <div style={styles.floorPlaceholder}>
@@ -608,6 +640,11 @@ const styles = {
     justifyContent: 'center', lineHeight: 1 },
   pinOn: { background: ORANGE, transform: 'translate(-50%,-50%) scale(1.3)', zIndex: 4 },
   pinVisited: { background: '#b6bac6', border: '2px solid #eef0f5' },
+  foot: { position: 'absolute', zIndex: 3, transform: 'translate(-50%,-50%)', fontSize: 15, lineHeight: 1,
+    filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.35))', pointerEvents: 'none' },
+  crossFloor: { position: 'absolute', zIndex: 5, transform: 'translate(-50%,-180%)', whiteSpace: 'nowrap',
+    background: BLUE, color: '#fff', fontSize: 10, fontWeight: 700, padding: '3px 7px', borderRadius: 10,
+    boxShadow: '0 2px 6px rgba(0,0,0,0.3)', pointerEvents: 'none' },
 
   roomChips: { display: 'flex', gap: 8, overflowX: 'auto', padding: '10px 8px', flexShrink: 0, background: '#fff' },
   roomChip: { flexShrink: 0, width: 36, height: 36, borderRadius: '50%', border: '1px solid #e0e0e6', background: '#fff',
