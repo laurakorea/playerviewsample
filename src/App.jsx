@@ -1,14 +1,18 @@
 import { useState, useEffect } from 'react';
 import './App.css';
 import { tourData } from './data/tourData';
+import { orsayTourData } from './data/orsayTourData';
 import StartScreen from './screens/StartScreen';
 import AudioGuideScreen from './screens/AudioGuideScreen';
 import NavigationScreen from './screens/NavigationScreen';
 import PlayerV2 from './screens/PlayerV2';
+import OrsayPlayer from './screens/OrsayPlayer';
 
 export default function App() {
   const [screen, setScreen] = useState('start');
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [orsayIndex, setOrsayIndex] = useState(0);
+  const orsayArtworks = orsayTourData.artworks;
 
   // URL(해시) ↔ 화면 상태 동기화
   useEffect(() => {
@@ -42,6 +46,11 @@ export default function App() {
     setScreen('v2');
   };
 
+  const handleStartOrsay = () => {
+    setOrsayIndex(0);
+    setScreen('orsay');
+  };
+
   const handleNavigate = () => {
     setScreen('navigate');
   };
@@ -68,7 +77,19 @@ export default function App() {
   return (
     <div>
       {screen === 'start' && (
-        <StartScreen onStart={handleStart} onStart2={handleStart2} />
+        <StartScreen onStart={handleStart} onStart2={handleStart2} onStartOrsay={handleStartOrsay} />
+      )}
+      {screen === 'orsay' && (
+        <OrsayPlayer
+          artwork={orsayArtworks[orsayIndex]}
+          artworks={orsayArtworks}
+          currentIndex={orsayIndex}
+          total={orsayArtworks.length}
+          onPrev={() => setOrsayIndex(i => Math.max(0, i - 1))}
+          onNext={() => setOrsayIndex(i => Math.min(orsayArtworks.length - 1, i + 1))}
+          onSelectIndex={(i) => setOrsayIndex(i)}
+          onHome={() => setScreen('start')}
+        />
       )}
       {screen === 'v2' && (
         <PlayerV2
