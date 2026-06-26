@@ -12,8 +12,13 @@ export default function OrsayPlayer({
   const [snap, setSnap] = useState(2);        // 진입 시 전체(지도+칩+스트립+버튼) 노출
   const [dragH, setDragH] = useState(null);   // 드래그 중 px, 평소 null
   const [tab, setTab] = useState('map');      // 'map' | 'list'
+  const [listFilter, setListFilter] = useState('all'); // 'all' | 'best' | 'liked'
+  const [showRoute, setShowRoute] = useState(true);
   const [autoplay, setAutoplay] = useState(false);
+  const [speed, setSpeed] = useState(1);
   const [liked, setLiked] = useState(false);
+
+  const [overlay, setOverlay] = useState(null); // 'comments' | 'script' | 'settings' | null
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -89,6 +94,11 @@ export default function OrsayPlayer({
     if (!a) return;
     a.currentTime = Math.max(0, a.currentTime + sec);
   };
+  const changeSpeed = (s) => {
+    setSpeed(s);
+    const a = audioRef.current;
+    if (a) a.playbackRate = s;
+  };
   const fmt = (s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
   const totalDisplay = duration > 0 ? fmt(duration) : artwork.duration?.slice(3) ?? '0:00';
 
@@ -147,16 +157,11 @@ export default function OrsayPlayer({
           <div style={styles.topRight}>
             {!isFull && (
               <>
-                <button style={styles.topChip}>💬 댓글</button>
-                <button style={styles.topChip}>📄 스크립트</button>
+                <button style={styles.topChip} onClick={() => setOverlay('comments')}>💬 댓글</button>
+                <button style={styles.topChip} onClick={() => setOverlay('script')}>📄 스크립트</button>
               </>
             )}
-            <button
-              style={{ ...styles.autoPill, ...(autoplay ? styles.autoPillOn : {}) }}
-              onClick={() => setAutoplay(a => !a)}
-            >
-              자동재생 {autoplay ? 'on' : 'off'}
-            </button>
+            <button style={styles.gearBtn} onClick={() => setOverlay('settings')}>⚙</button>
           </div>
         </div>
 
@@ -184,7 +189,11 @@ export default function OrsayPlayer({
               </button>
             </div>
 
-            {artwork.description && <p style={styles.desc}>{artwork.description}</p>}
+            <div style={styles.chips}>
+              <button style={styles.chip} onClick={() => setOverlay('comments')}>댓글 0</button>
+              <button style={styles.chip} onClick={() => setOverlay('script')}>스크립트</button>
+              <span style={styles.chip}>위치보기</span>
+            </div>
 
             <div style={styles.progWrap}>
               <div style={styles.progBar} onClick={seek}>
@@ -205,15 +214,21 @@ export default function OrsayPlayer({
             </div>
           </div>
         ) : (
-          /* ── 미니 플레이어: 작품 이미지 풀배경 + 컨트롤 오버레이 ── */
-          <div style={styles.miniWrap} onClick={playPause}>
+          /* ── 미니 플레이어: 작품 이미지 풀배경 + 트랙명/컨트롤 한 줄 ── */
+          <div style={styles.miniWrap}>
             <ArtImage src={artwork.imageSrc} alt={artwork.title} cover />
-            <div style={styles.miniTopInfo}>
-              <span style={styles.miniTitle}>{artwork.title}</span>
-              <span style={styles.miniSub}>{floorLabel(artwork)} · {artwork.subtitle}</span>
-            </div>
-            <div style={styles.miniControls} onClick={e => e.stopPropagation()}>
-              <Controls isPlaying={isPlaying} hasAudio={hasAudio} onPlay={playPause} onPrev={onPrev} onNext={onNext} onNudge={nudge} />
+            <div style={styles.miniBar}>
+              <div style={styles.miniBarInfo}>
+                <span style={styles.miniBarTitle}>{artwork.title}</span>
+                <span style={styles.miniBarSub}>{floorLabel(artwork)}</span>
+              </div>
+              <div style={styles.miniBarControls}>
+                <button style={styles.miniBarBtn} onClick={onPrev}>⏮</button>
+                <button style={{ ...styles.miniBarPlay, ...(hasAudio ? {} : styles.playDisabled) }} onClick={playPause}>
+                  {hasAudio ? (isPlaying ? '⏸' : '▶') : '🔇'}
+                </button>
+                <button style={styles.miniBarBtn} onClick={onNext}>⏭</button>
+              </div>
             </div>
           </div>
         )}
@@ -235,12 +250,22 @@ export default function OrsayPlayer({
           <div style={styles.sheetBody}>
             <div style={styles.mapBox}>
               <FloorMapView artworks={artworks} currentIndex={currentIndex} roomStops={roomStops}
-                            onPinClick={(i) => { onSelectIndex(i); setSnap(2); }} />
-              <button style={styles.tocBtn} onClick={() => setTab('list')}>☰ 목차</button>
+                            showRoute={showRoute}
+                            onPinClick={(i) => { onSelectIndex(i); setSnap(2); }}
+                            onMapClick={() => setSnap(1)} />
+              <div style={styles.mapTopBar}>
+                <button style={styles.tocBtn} onClick={() => setTab('list')}>☰ 목차</button>
+                <button style={{ ...styles.mapTopBtn, ...(showRoute ? styles.mapTopBtnOn : {}) }}
+                        onClick={() => setShowRoute(r => !r)}>
+                  {showRoute ? '경로 끄기' : '경로 켜기'}
+                </button>
+                <button style={styles.mapTopBtn}>내 위치</button>
+                <button style={styles.mapTopBtn}>길찾기</button>
+              </div>
             </div>
 
             {snap === 2 && (
-              <>
+              <div style={styles.stripOverlay}>
                 <div style={styles.stripHeader}>
                   {activeStop ? `${activeStop.seq}번 · ${floorLabel(artwork)}` : '추가 작품'}
                   <span style={styles.stripHeaderCount}>{stripIdxs.length}개 트랙</span>
@@ -253,7 +278,6 @@ export default function OrsayPlayer({
                       <button key={a.id} style={styles.stripCard} onClick={() => onSelectIndex(gi)}>
                         <div style={{ ...styles.stripThumb, ...(active ? styles.stripThumbOn : {}) }}>
                           <ArtImage src={a.imageSrc} alt={a.title} cover />
-                          <span style={{ ...styles.stripNo, ...(active ? styles.stripNoOn : {}) }}>{k + 1}</span>
                           {active && (
                             <div style={styles.nowPlay}>
                               <span style={{ ...styles.eqBar, animationDelay: '0s', height: 8 }} />
@@ -274,7 +298,7 @@ export default function OrsayPlayer({
                     {nextStop ? `다음 장소 (${roomName(nextStop.room)}) →` : '마지막 장소입니다'}
                   </button>
                 </div>
-              </>
+              </div>
             )}
           </div>
         ) : (
@@ -282,22 +306,87 @@ export default function OrsayPlayer({
           <div style={styles.listBody}>
             <div style={styles.listTopBar}>
               <button style={styles.tocBtnList} onClick={() => setTab('map')}>▥ 지도</button>
+              <button style={{ ...styles.listFilter, ...(listFilter === 'all' ? styles.listFilterOn : {}) }}
+                      onClick={() => setListFilter('all')}>전체</button>
+              <button style={{ ...styles.listFilter, ...(listFilter === 'best' ? styles.listFilterOn : {}) }}
+                      onClick={() => setListFilter('best')}>best</button>
+              <button style={{ ...styles.listFilter, ...(listFilter === 'liked' ? styles.listFilterOn : {}) }}
+                      onClick={() => setListFilter('liked')}>좋아요</button>
             </div>
-            {artworks.map((a, i) => (
-              <button key={a.id}
-                      style={{ ...styles.listItem, ...(i === currentIndex ? styles.listItemOn : {}) }}
-                      onClick={() => onSelectIndex(i)}>
-                <span style={{ ...styles.listNo, ...(i === currentIndex ? styles.listNoOn : {}) }}>{i + 1}</span>
-                <div style={{ flex: 1, textAlign: 'left' }}>
-                  <div style={styles.listTitle}>{a.star ? '★ ' : ''}{a.title}</div>
-                  <div style={styles.listSub}>{floorLabel(a)}{a.subtitle ? ` · ${a.subtitle}` : ''}</div>
-                </div>
-                <span style={styles.listDur}>{a.duration?.slice(3)}</span>
-              </button>
-            ))}
+            {artworks.map((a, i) => {
+              if (listFilter === 'best' && !a.star) return null;
+              if (listFilter === 'liked' && i !== currentIndex) return null;
+              return (
+                <button key={a.id}
+                        style={{ ...styles.listItem, ...(i === currentIndex ? styles.listItemOn : {}) }}
+                        onClick={() => onSelectIndex(i)}>
+                  <span style={{ ...styles.listNo, ...(i === currentIndex ? styles.listNoOn : {}) }}>{i + 1}</span>
+                  <div style={{ flex: 1, textAlign: 'left' }}>
+                    <div style={styles.listTitle}>{a.star ? '★ ' : ''}{a.title}</div>
+                    <div style={styles.listSub}>{floorLabel(a)}{a.subtitle ? ` · ${a.subtitle}` : ''}</div>
+                  </div>
+                  <span style={styles.listDur}>{a.duration?.slice(3)}</span>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
+
+      {overlay && (
+        <>
+          <div style={styles.dim} onClick={() => setOverlay(null)} />
+          <div style={{ ...styles.overlaySheet, ...(overlay === 'settings' ? { height: 'auto' } : {}) }}>
+            <div style={styles.overlayHandle}>
+              <div style={styles.grabber} />
+            </div>
+            <div style={styles.overlayHeader}>
+              <span style={styles.overlayTitle}>
+                {overlay === 'comments' ? '댓글' : overlay === 'script' ? '스크립트' : '설정'}
+              </span>
+              <button style={styles.overlayClose} onClick={() => setOverlay(null)}>✕</button>
+            </div>
+            <div style={styles.overlayBody}>
+              {overlay === 'comments' && (
+                <div style={styles.overlayEmpty}>
+                  <span style={{ fontSize: 32 }}>💬</span>
+                  <p style={{ margin: '12px 0 0', color: TXT_SUBTLE, fontSize: 14 }}>아직 댓글이 없습니다</p>
+                </div>
+              )}
+              {overlay === 'script' && (
+                <div style={styles.scriptBody}>
+                  <h3 style={styles.scriptTitle}>{artwork.title}</h3>
+                  <p style={styles.scriptText}>{artwork.description || '스크립트가 준비되지 않았습니다.'}</p>
+                </div>
+              )}
+              {overlay === 'settings' && (
+                <div style={styles.settingsBody}>
+                  <div style={styles.settingsRow}>
+                    <span style={styles.settingsLabel}>자동재생</span>
+                    <button
+                      style={{ ...styles.toggleTrack, ...(autoplay ? styles.toggleTrackOn : {}) }}
+                      onClick={() => setAutoplay(a => !a)}>
+                      <div style={{ ...styles.toggleHandle, ...(autoplay ? styles.toggleHandleOn : {}) }} />
+                    </button>
+                  </div>
+                  <div style={styles.settingsRow}>
+                    <span style={styles.settingsLabel}>재생 속도</span>
+                  </div>
+                  <div style={styles.speedRow}>
+                    {[0.5, 0.75, 1, 1.25, 1.5, 2].map(s => (
+                      <button key={s}
+                        style={{ ...styles.speedBtn, ...(speed === s ? styles.speedBtnOn : {}) }}
+                        onClick={() => changeSpeed(s)}>
+                        {s === 1 ? '1.0x' : `${s}x`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -347,12 +436,76 @@ function Controls({ big, isPlaying, hasAudio, onPlay, onPrev, onNext, onNudge })
 }
 
 // 층별 이미지 도면 + 순서 핀 + 경로선
-function FloorMapView({ artworks, currentIndex, roomStops, onPinClick }) {
+function FloorMapView({ artworks, currentIndex, roomStops, showRoute, onPinClick, onMapClick }) {
   const current = artworks[currentIndex];
   const [floor, setFloor] = useState(current.floor || 1);
   const [imgErr, setImgErr] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
   const chipsRef = useRef(null);
+
+  // 줌/팬 상태
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const panRef = useRef({ dragging: false, startX: 0, startY: 0, startPanX: 0, startPanY: 0 });
+  const pinchRef = useRef({ pinching: false, startDist: 0, startZoom: 1 });
+
+  // 층 바뀌면 줌 리셋
+  useEffect(() => { setZoom(1); setPan({ x: 0, y: 0 }); }, [floor]);
+
+  const onMapPointerDown = (e) => {
+    if (e.pointerType === 'touch') return; // touch는 onTouchStart에서 처리
+    panRef.current = { dragging: true, startX: e.clientX, startY: e.clientY, startPanX: pan.x, startPanY: pan.y };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  };
+  const onMapPointerMove = (e) => {
+    if (!panRef.current.dragging || e.pointerType === 'touch') return;
+    setPan({
+      x: panRef.current.startPanX + (e.clientX - panRef.current.startX),
+      y: panRef.current.startPanY + (e.clientY - panRef.current.startY),
+    });
+  };
+  const onMapPointerUp = (e) => {
+    if (e.pointerType === 'touch') return;
+    panRef.current.dragging = false;
+  };
+
+  const getTouchDist = (touches) => {
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+  const onMapTouchStart = (e) => {
+    if (e.touches.length === 2) {
+      pinchRef.current = { pinching: true, startDist: getTouchDist(e.touches), startZoom: zoom };
+    } else if (e.touches.length === 1 && zoom > 1) {
+      panRef.current = { dragging: true, startX: e.touches[0].clientX, startY: e.touches[0].clientY, startPanX: pan.x, startPanY: pan.y };
+    }
+  };
+  const onMapTouchMove = (e) => {
+    if (pinchRef.current.pinching && e.touches.length === 2) {
+      e.preventDefault();
+      const dist = getTouchDist(e.touches);
+      const newZoom = Math.min(4, Math.max(1, pinchRef.current.startZoom * (dist / pinchRef.current.startDist)));
+      setZoom(newZoom);
+    } else if (panRef.current.dragging && e.touches.length === 1 && zoom > 1) {
+      e.preventDefault();
+      setPan({
+        x: panRef.current.startPanX + (e.touches[0].clientX - panRef.current.startX),
+        y: panRef.current.startPanY + (e.touches[0].clientY - panRef.current.startY),
+      });
+    }
+  };
+  const onMapTouchEnd = () => {
+    pinchRef.current.pinching = false;
+    panRef.current.dragging = false;
+    if (zoom <= 1) setPan({ x: 0, y: 0 });
+  };
+
+  const onMapWheel = (e) => {
+    e.preventDefault();
+    setZoom(z => Math.min(4, Math.max(1, z - e.deltaY * 0.002)));
+  };
+
+  const resetZoom = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
 
   // 현재 작품 층으로 자동 전환
   useEffect(() => { if (current.floor) setFloor(current.floor); }, [current.floor]);
@@ -383,22 +536,16 @@ function FloorMapView({ artworks, currentIndex, roomStops, onPinClick }) {
     }
     return out.map(p => `${p[0]},${p[1]}`).join(' ');
   };
-  const traveledPts = densePts(floorStops.filter(s => s.seq <= currentSeq));
-  const upcomingPts = densePts(floorStops.filter(s => s.seq >= currentSeq + 1));
+  // 전체 경로 (그레이 선)
+  const allPts = densePts(floorStops);
 
-  // 현재 → 다음 구간 (개미행렬 애니메이션 + 발자국). 같은 층일 때만 선으로 표시.
+  // 활성 핀 → 다음 핀 구간 (오렌지 화살표)
   const segFrom = floorStops.find(s => s.seq === currentSeq);
   const segTo = floorStops.find(s => s.seq === currentSeq + 1);
-  const nextGlobal = roomStops.find(s => s.seq === currentSeq + 1);
-  let seg = null, footPos = null, crossFloor = null;
+  let seg = null;
   if (segFrom && segTo) {
     const a = pins[segFrom.room], b = pins[segTo.room];
-    seg = `${a.x},${a.y} ${b.x},${b.y}`;
-    footPos = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-  } else if (segFrom && nextGlobal && nextGlobal.floor !== floor) {
-    // 다음 장소가 다른 층 → 현재 핀 옆에 층 이동 안내
-    const a = pins[segFrom.room];
-    crossFloor = { x: a.x, y: a.y, label: orsayFloorMaps[nextGlobal.floor]?.label || `${nextGlobal.floor}층` };
+    seg = `${a.x},${a.y} ${(a.x + b.x) / 2},${(a.y + b.y) / 2} ${b.x},${b.y}`;
   }
 
   // 현재 stop 칩을 가운데로 (지도는 한 화면에 다 보이므로 스크롤 불필요)
@@ -419,36 +566,25 @@ function FloorMapView({ artworks, currentIndex, roomStops, onPinClick }) {
 
   return (
     <div style={styles.floorWrap}>
-      <div style={styles.floorImgBox}>
+      <div style={styles.floorImgBox}
+           onPointerDown={onMapPointerDown} onPointerMove={onMapPointerMove}
+           onPointerUp={onMapPointerUp} onPointerCancel={onMapPointerUp}
+           onTouchStart={onMapTouchStart} onTouchMove={onMapTouchMove} onTouchEnd={onMapTouchEnd}
+           onWheel={onMapWheel}
+           onClick={onMapClick}>
         {map && !imgErr ? (
-          <div style={styles.floorCanvas}>
+          <div style={{ ...styles.floorCanvas, transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`, transition: pinchRef.current.pinching || panRef.current.dragging ? 'none' : 'transform 0.2s ease-out' }}>
             <img src={map.src} alt={map.label} style={styles.floorImg} onError={() => setImgErr(true)} />
-            {/* 경로선: 지나간 구간(회색) → 앞으로 갈 구간(파랑) + 진행 방향 화살표 */}
-            {floorStops.length > 1 && (
+            {floorStops.length > 1 && showRoute && (
               <svg style={styles.routeSvg} viewBox="0 0 100 100">
-                <defs>
-                  <marker id="arrB" viewBox="0 0 10 10" refX="6" refY="5" markerUnits="userSpaceOnUse"
-                          markerWidth="5.5" markerHeight="5.5" orient="auto">
-                    <path d="M0,1 L9,5 L0,9 z" fill={BLUE} />
-                  </marker>
-                  <marker id="arrG" viewBox="0 0 10 10" refX="6" refY="5" markerUnits="userSpaceOnUse"
-                          markerWidth="5.5" markerHeight="5.5" orient="auto">
-                    <path d="M0,1 L9,5 L0,9 z" fill="#b6bac6" />
-                  </marker>
-                </defs>
-                {upcomingPts && (
-                  <polyline points={upcomingPts} fill="none" stroke={BLUE} strokeWidth="0.9"
-                            strokeLinejoin="round" strokeLinecap="round" opacity="0.9"
-                            markerMid="url(#arrB)" />
+                {/* 전체 경로: 그레이 선 */}
+                {allPts && (
+                  <polyline points={allPts} fill="none" stroke={BORDER_DEFAULT} strokeWidth="0.9"
+                            strokeLinejoin="round" strokeLinecap="round" opacity="0.7" />
                 )}
-                {traveledPts && (
-                  <polyline points={traveledPts} fill="none" stroke="#b6bac6" strokeWidth="1"
-                            strokeLinejoin="round" strokeLinecap="round" opacity="0.95"
-                            markerMid="url(#arrG)" />
-                )}
-                {/* 현재 → 다음: 점선이 다음 쪽으로 흐르는 개미행렬 */}
+                {/* 활성 → 다음: 오렌지 점선 애니메이션 */}
                 {seg && (
-                  <polyline points={seg} fill="none" stroke={BLUE} strokeWidth="1.4"
+                  <polyline points={seg} fill="none" stroke={ORANGE} strokeWidth="1.4"
                             strokeDasharray="2.4 2.4" strokeLinecap="round">
                     <animate attributeName="stroke-dashoffset" values="9.6;0" dur="0.55s" repeatCount="indefinite" />
                   </polyline>
@@ -458,24 +594,23 @@ function FloorMapView({ artworks, currentIndex, roomStops, onPinClick }) {
             {/* 순서 핀: 지나감(회색) · 현재(주황) · 앞으로(파랑) */}
             {floorStops.map(s => {
               const pos = pins[s.room];
+              const active = s.seq === currentSeq;
               return (
-                <button key={s.room}
-                        style={{ ...styles.pin, left: `${pos.x}%`, top: `${pos.y}%`, ...pinStyle(s) }}
-                        onClick={() => onPinClick(s.idxs[0])}>
-                  {s.seq}
-                </button>
+                <div key={s.room} style={{ position: 'absolute', left: `${pos.x}%`, top: `${pos.y}%`, transform: 'translate(-50%,-50%)', zIndex: active ? 4 : 2, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  {active && (
+                    <div style={styles.pinTooltipWrap}>
+                      <div style={styles.pinTooltip}>{roomName(s.room)}</div>
+                      <div style={styles.pinTooltipArrow} />
+                    </div>
+                  )}
+                  <button
+                    style={{ ...styles.pin, position: 'relative', left: 'auto', top: 'auto', transform: 'none', ...pinStyle(s) }}
+                    onClick={(e) => { e.stopPropagation(); onPinClick(s.idxs[0]); }}>
+                    {s.seq}
+                  </button>
+                </div>
               );
             })}
-            {/* 다음 가는 길 발자국 */}
-            {footPos && (
-              <div style={{ ...styles.foot, left: `${footPos.x}%`, top: `${footPos.y}%` }}>👣</div>
-            )}
-            {/* 다음 장소가 다른 층이면 층 이동 안내 */}
-            {crossFloor && (
-              <div style={{ ...styles.crossFloor, left: `${crossFloor.x}%`, top: `${crossFloor.y}%` }}>
-                다음 {crossFloor.label} ↗
-              </div>
-            )}
           </div>
         ) : (
           <div style={styles.floorPlaceholder}>
@@ -486,62 +621,57 @@ function FloorMapView({ artworks, currentIndex, roomStops, onPinClick }) {
         )}
       </div>
 
-      {/* 층 선택 햄버거 (지도 왼쪽 아래 고정) */}
-      <div style={styles.floorFab}>
-        {menuOpen && (
-          <div style={styles.floorMenu}>
-            {floors.map(f => (
-              <button key={f}
-                      style={{ ...styles.floorMenuItem, ...(f === floor ? styles.floorMenuItemOn : {}) }}
-                      onClick={() => { setFloor(f); setMenuOpen(false); }}>
-                {orsayFloorMaps[f].label}
-              </button>
-            ))}
-          </div>
-        )}
-        <button style={styles.floorFabBtn} onClick={() => setMenuOpen(o => !o)}>
-          <span style={styles.floorFabIcon}>☰</span>{map ? map.label : `${floor}층`}
-        </button>
-      </div>
-
-      {/* 순서 칩 (1번 ~ 마지막). 다른 층 stop 누르면 자동으로 그 층으로 전환됨 */}
-      <div ref={chipsRef} style={styles.roomChips}>
-        {roomStops.map(s => (
-          <button key={s.room} data-active={s.seq === currentSeq ? '1' : '0'}
-                  style={{ ...styles.roomChip, ...chipStyle(s) }}
-                  onClick={() => onPinClick(s.idxs[0])}>
-            {s.seq}
+      {/* 층 선택 pill */}
+      <div style={styles.floorPill}>
+        {floors.slice().reverse().map(f => (
+          <button key={f}
+                  style={{ ...styles.floorPillItem, ...(f === floor ? styles.floorPillItemOn : {}) }}
+                  onClick={() => setFloor(f)}>
+            {orsayFloorMaps[f].label}
           </button>
         ))}
       </div>
+
     </div>
   );
 }
 
-const W = '#fff';
-const ORANGE = '#F2994A';
-const BLUE = '#4F6FE8';
+// — TourLive Design Tokens —
+const W = '#FFFFFF';        // Gray.0 / text.inverse
+const ORANGE = '#FF730D';   // Orange.500 / primary.default
+const ORANGE_HOVER = '#FF5811'; // Orange.600 / primary.hover
+const ORANGE_LIGHT = '#FFF3EC'; // Orange.100 / primary.light
+const TXT_STRONG = '#1A1A1A';  // Gray.800
+const TXT_DEFAULT = '#3A3A3A'; // Gray.700
+const TXT_SUBTLE = '#8A8A8A';  // Gray.600
+const TXT_DISABLED = '#A0A0A0'; // Gray.500
+const BG_PAGE = '#FFFFFF';     // Gray.0
+const BG_SUBTLE = '#F9F9F9';   // Gray.100
+const BG_MUTED = '#F2F4F7';    // Gray.200
+const BORDER_DEFAULT = '#D1D1D1'; // Gray.400
+const PLAYER_BG = '#000000';   // Gray.900
+const FONT = "'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif";
 const styles = {
-  root: { position: 'relative', height: '100dvh', minHeight: '100vh', background: '#000', overflow: 'hidden', color: W,
-    fontFamily: 'system-ui, sans-serif' },
+  root: { position: 'relative', height: '100dvh', minHeight: '100vh', background: PLAYER_BG, overflow: 'hidden', color: W,
+    fontFamily: FONT },
 
   player: { position: 'absolute', top: 0, left: 0, right: 0, display: 'flex', flexDirection: 'column',
-    background: '#0c0c0e', overflow: 'hidden' },
+    background: PLAYER_BG, overflow: 'hidden' },
   topBar: { position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     padding: '10px 16px', background: 'linear-gradient(rgba(0,0,0,0.45), transparent)' },
   iconBtn: { background: 'none', border: 'none', color: W, fontSize: 24, lineHeight: 1, cursor: 'pointer', width: 32 },
   topRight: { display: 'flex', alignItems: 'center', gap: 8 },
-  topChip: { display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,0.42)',
-    border: '1px solid rgba(255,255,255,0.25)', color: '#fff', fontSize: 12, padding: '5px 10px', borderRadius: 20,
+  topChip: { display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(255,255,255,0.15)',
+    border: 'none', color: W, fontSize: 12, padding: '5px 10px', borderRadius: 9999,
     cursor: 'pointer', whiteSpace: 'nowrap' },
-  autoPill: { background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.18)', color: 'rgba(255,255,255,0.7)',
-    fontSize: 12, padding: '5px 12px', borderRadius: 20, cursor: 'pointer' },
-  autoPillOn: { background: 'rgba(79,111,232,0.25)', border: `1px solid ${BLUE}`, color: '#9db0ff' },
+  gearBtn: { background: 'rgba(255,255,255,0.15)', border: 'none', color: W, fontSize: 18,
+    width: 36, height: 36, borderRadius: 9999, cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center' },
 
   // 풀 플레이어
-  fullWrap: { flex: 1, display: 'flex', flexDirection: 'column', padding: '4px 22px 16px', overflow: 'auto' },
-  artBig: { position: 'relative', width: '72%', aspectRatio: '3 / 4', margin: '6px auto 0', borderRadius: 6, overflow: 'hidden',
-    background: '#222', boxShadow: '0 12px 40px rgba(0,0,0,0.6)' },
+  fullWrap: { flex: 1, display: 'flex', flexDirection: 'column', padding: '4px 20px 16px', overflow: 'auto' },
+  artBig: { position: 'relative', width: '72%', aspectRatio: '3 / 4', margin: '6px auto 0', borderRadius: 8, overflow: 'hidden',
+    background: TXT_DEFAULT, boxShadow: '0 12px 40px rgba(0,0,0,0.6)' },
   artImg: { width: '100%', height: '100%', objectFit: 'cover' },
   coverImg: { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' },
   imgFallback: { width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -549,101 +679,124 @@ const styles = {
   imgFallbackIcon: { fontSize: 40, opacity: 0.5 },
   playOverlay: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
     fontSize: 40, color: 'rgba(255,255,255,0.85)', textShadow: '0 2px 12px rgba(0,0,0,0.6)', pointerEvents: 'none' },
-  badge: { position: 'absolute', top: 8, left: 8, background: ORANGE, color: '#1a1208', fontSize: 10, fontWeight: 700,
-    padding: '3px 8px', borderRadius: 4 },
+  badge: { position: 'absolute', top: 8, left: 8, background: ORANGE, color: W, fontSize: 11, fontWeight: 600,
+    padding: '3px 8px', borderRadius: 9999, letterSpacing: '0.04em' },
   countRow: { textAlign: 'center', margin: '12px 0 4px' },
-  count: { fontSize: 12, color: 'rgba(255,255,255,0.5)' },
-  titleRow: { display: 'flex', alignItems: 'flex-start', gap: 10, marginTop: 4 },
-  title: { fontSize: 20, fontWeight: 700, color: W, margin: 0, lineHeight: 1.35 },
-  subtitle: { fontSize: 13, color: 'rgba(255,255,255,0.5)', margin: '4px 0 0' },
-  heart: { background: 'none', border: 'none', color: '#ff5a7a', fontSize: 24, cursor: 'pointer', lineHeight: 1, flexShrink: 0 },
-  desc: { fontSize: 13, lineHeight: 1.6, color: 'rgba(255,255,255,0.72)', marginTop: 12 },
+  count: { fontSize: 13, color: TXT_SUBTLE },
+  titleRow: { display: 'flex', alignItems: 'flex-start', gap: 12, marginTop: 4 },
+  title: { fontSize: 20, fontWeight: 600, color: W, margin: 0, lineHeight: 1.45 },
+  subtitle: { fontSize: 13, color: TXT_SUBTLE, margin: '4px 0 0', lineHeight: 1.5 },
+  heart: { background: 'none', border: 'none', color: '#FA3E4D', fontSize: 24, cursor: 'pointer', lineHeight: 1, flexShrink: 0 },
+  desc: { fontSize: 14, lineHeight: 1.55, color: TXT_SUBTLE, marginTop: 12 },
+
+  chips: { display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' },
+  chip: { fontSize: 13, color: W, background: 'rgba(255,255,255,0.15)', padding: '8px 12px',
+    borderRadius: 8, whiteSpace: 'nowrap', border: 'none', cursor: 'pointer' },
 
   progWrap: { marginTop: 16 },
-  progBar: { position: 'relative', height: 4, background: 'rgba(255,255,255,0.15)', borderRadius: 4, cursor: 'pointer' },
-  progFill: { position: 'absolute', top: 0, left: 0, height: '100%', background: BLUE, borderRadius: 4 },
+  progBar: { position: 'relative', height: 4, background: 'rgba(255,255,255,0.15)', borderRadius: 9999, cursor: 'pointer' },
+  progFill: { position: 'absolute', top: 0, left: 0, height: '100%', background: ORANGE, borderRadius: 9999 },
   progThumb: { position: 'absolute', top: '50%', transform: 'translate(-50%,-50%)', width: 12, height: 12, borderRadius: '50%',
     background: '#fff', pointerEvents: 'none' },
   timeRow: { display: 'flex', justifyContent: 'space-between', marginTop: 7 },
-  time: { fontSize: 11, color: 'rgba(255,255,255,0.45)' },
+  time: { fontSize: 12, color: TXT_SUBTLE },
 
-  controls: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 18, marginTop: 16 },
-  ctrlSide: { background: 'none', border: 'none', color: 'rgba(255,255,255,0.75)', fontSize: 20, cursor: 'pointer',
+  controls: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 20, marginTop: 16 },
+  ctrlSide: { background: 'none', border: 'none', color: TXT_SUBTLE, fontSize: 20, cursor: 'pointer',
     display: 'flex', alignItems: 'center' },
   ctrlNum: { fontSize: 9, bottom: 0 },
   ctrl: { background: 'none', border: 'none', color: W, fontSize: 22, cursor: 'pointer' },
   ctrlBig: { background: 'none', border: 'none', color: W, fontSize: 26, cursor: 'pointer' },
-  play: { width: 48, height: 48, borderRadius: '50%', background: '#fff', color: '#0c0c0e', fontSize: 18, cursor: 'pointer',
+  play: { width: 48, height: 48, borderRadius: '50%', background: W, color: PLAYER_BG, fontSize: 18, cursor: 'pointer',
     display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none' },
-  playBig: { width: 64, height: 64, borderRadius: '50%', background: '#fff', color: '#0c0c0e', fontSize: 24, cursor: 'pointer',
+  playBig: { width: 64, height: 64, borderRadius: '50%', background: W, color: PLAYER_BG, fontSize: 24, cursor: 'pointer',
     display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none' },
   playDisabled: { background: 'rgba(255,255,255,0.25)', color: 'rgba(255,255,255,0.6)' },
 
-  bottomBtns: { display: 'flex', gap: 10, marginTop: 'auto', paddingTop: 18 },
-  bottomBtn: { flex: 1, padding: '13px', borderRadius: 10, background: 'rgba(255,255,255,0.08)',
-    border: '1px solid rgba(255,255,255,0.12)', color: W, fontSize: 14, fontWeight: 600, cursor: 'pointer' },
+  bottomBtns: { display: 'flex', gap: 8, marginTop: 'auto', paddingTop: 20 },
+  bottomBtn: { flex: 1, padding: '14px', borderRadius: 12, background: 'rgba(255,255,255,0.15)',
+    border: 'none', color: W, fontSize: 15, fontWeight: 600, cursor: 'pointer' },
 
   // 미니 플레이어
-  miniWrap: { position: 'absolute', inset: 0, zIndex: 1, background: '#000' },
-  miniTopInfo: { position: 'absolute', left: 16, right: 16, top: 52, display: 'flex', flexDirection: 'column', gap: 2,
-    textShadow: '0 1px 8px rgba(0,0,0,0.7)', pointerEvents: 'none' },
-  miniTitle: { fontSize: 17, fontWeight: 700, color: '#fff' },
-  miniSub: { fontSize: 12, color: 'rgba(255,255,255,0.8)' },
-  miniControls: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingBottom: 14,
-    background: 'linear-gradient(transparent, rgba(0,0,0,0.6))' },
+  miniWrap: { position: 'absolute', inset: 0, zIndex: 1, background: PLAYER_BG },
+  miniBar: { position: 'absolute', left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center',
+    padding: '12px 16px', gap: 12, background: 'linear-gradient(transparent, rgba(0,0,0,0.7))' },
+  miniBarInfo: { flex: 1, display: 'flex', flexDirection: 'column', gap: 2, overflow: 'hidden', textAlign: 'left' },
+  miniBarTitle: { fontSize: 15, fontWeight: 700, color: W, whiteSpace: 'nowrap',
+    textShadow: '0 1px 4px rgba(0,0,0,0.5)', display: 'inline-block',
+    animation: 'marquee 8s linear infinite', animationDelay: '2s' },
+  miniBarSub: { fontSize: 12, color: 'rgba(255,255,255,0.7)', whiteSpace: 'nowrap' },
+  miniBarControls: { display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 },
+  miniBarBtn: { background: 'none', border: 'none', color: W, fontSize: 20, cursor: 'pointer',
+    width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  miniBarPlay: { width: 40, height: 40, borderRadius: '50%', background: W, color: PLAYER_BG,
+    fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none' },
 
   // 시트
-  sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, background: '#fff', borderRadius: '18px 18px 0 0',
-    display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 -8px 30px rgba(0,0,0,0.4)' },
+  sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, background: BG_PAGE, borderRadius: '16px 16px 0 0',
+    display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 -4px 12px rgba(0,0,0,0.3)' },
   handleZone: { display: 'flex', alignItems: 'center', justifyContent: 'center', height: 34, cursor: 'grab',
     touchAction: 'none', flexShrink: 0 },
-  grabber: { width: 52, height: 6, borderRadius: 6, background: '#bdbdc6' },
-  tocBtn: { position: 'absolute', top: 10, right: 10, zIndex: 5, padding: '7px 12px', borderRadius: 8,
-    background: 'rgba(26,26,46,0.92)', color: '#fff', fontSize: 12, fontWeight: 700,
-    boxShadow: '0 2px 8px rgba(0,0,0,0.28)' },
-  listTopBar: { position: 'sticky', top: 0, zIndex: 1, display: 'flex', justifyContent: 'flex-end',
-    padding: '2px 6px 8px', background: '#fff' },
-  tocBtnList: { padding: '7px 12px', borderRadius: 8, background: '#1a1a2e', color: '#fff', fontSize: 12, fontWeight: 700 },
+  grabber: { width: 52, height: 6, borderRadius: 9999, background: BORDER_DEFAULT },
+  mapTopBar: { position: 'absolute', top: 10, left: 10, right: 10, zIndex: 5, display: 'flex', gap: 8,
+    flexWrap: 'wrap' },
+  tocBtn: { height: 34, padding: '0 12px', borderRadius: 9999,
+    background: TXT_DEFAULT, color: W, fontSize: 13, fontWeight: 700, border: 'none', cursor: 'pointer',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.28)', display: 'flex', alignItems: 'center' },
+  mapTopBtn: { height: 34, padding: '0 12px', borderRadius: 9999, border: `1px solid ${BORDER_DEFAULT}`,
+    background: BG_PAGE, color: TXT_STRONG, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center' },
+  mapTopBtnOn: { background: ORANGE, borderColor: ORANGE, color: W },
+  listTopBar: { position: 'sticky', top: 0, zIndex: 1, display: 'flex', alignItems: 'center', gap: 8,
+    padding: '4px 8px 8px', background: BG_PAGE },
+  tocBtnList: { height: 34, padding: '0 12px', borderRadius: 9999, background: TXT_STRONG, color: W, fontSize: 13, fontWeight: 700,
+    border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' },
 
-  sheetBody: { flex: 1, display: 'flex', flexDirection: 'column', padding: '12px 16px 16px', overflow: 'hidden', minHeight: 0 },
-  mapBox: { position: 'relative', flex: 1, borderRadius: 12, overflow: 'hidden', minHeight: 120, background: '#eef0f5' },
+  sheetBody: { position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 },
+  mapBox: { position: 'relative', flex: 1, overflow: 'hidden', minHeight: 0, background: BG_MUTED },
+  stripOverlay: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 5, padding: '0 16px 16px',
+    background: 'linear-gradient(transparent, rgba(255,255,255,0.95) 20%, #FFFFFF 30%)' },
 
   // 층 도면
   floorWrap: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' },
   // 스크롤 없이 한 화면에: 도면을 박스 안에 맞춰 표시(정사각 캔버스, 중앙 정렬)
-  floorImgBox: { position: 'relative', flex: 1, overflow: 'hidden', background: '#fafbfc', minHeight: 0,
-    display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  floorImgBox: { position: 'relative', flex: 1, overflow: 'hidden', background: BG_SUBTLE, minHeight: 0,
+    display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'none', cursor: 'grab' },
 
-  // 층 선택 햄버거 (지도 왼쪽 아래)
-  floorFab: { position: 'absolute', left: 10, bottom: 66, zIndex: 6, display: 'flex', flexDirection: 'column',
-    alignItems: 'flex-start', gap: 6 },
-  floorFabBtn: { display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', borderRadius: 10,
-    background: 'rgba(26,26,46,0.92)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer',
-    border: 'none', boxShadow: '0 2px 10px rgba(0,0,0,0.28)' },
-  floorFabIcon: { fontSize: 14, lineHeight: 1 },
-  floorMenu: { display: 'flex', flexDirection: 'column', gap: 4, background: '#fff', borderRadius: 10, padding: 5,
-    boxShadow: '0 4px 16px rgba(0,0,0,0.22)' },
-  floorMenuItem: { padding: '9px 16px', borderRadius: 8, border: 'none', background: '#f4f5f8', color: '#444',
-    fontSize: 13, fontWeight: 600, cursor: 'pointer', textAlign: 'left', whiteSpace: 'nowrap' },
-  floorMenuItemOn: { background: BLUE, color: '#fff' },
+  zoomReset: { position: 'absolute', right: 10, bottom: 66, zIndex: 6, padding: '8px 12px', borderRadius: 8,
+    background: TXT_DEFAULT, color: W, fontSize: 13, fontWeight: 700, border: 'none',
+    cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.28)' },
+
+  // 층 선택 pill
+  floorPill: { position: 'absolute', top: 50, left: 10, zIndex: 6, display: 'flex', flexDirection: 'column',
+    background: BG_PAGE, borderRadius: 9999, boxShadow: '0 2px 8px rgba(0,0,0,0.2)', overflow: 'hidden' },
+  floorPillItem: { padding: '10px 16px', border: 'none', background: 'transparent', color: TXT_SUBTLE,
+    fontSize: 14, fontWeight: 700, cursor: 'pointer', textAlign: 'center', whiteSpace: 'nowrap' },
+  floorPillItemOn: { color: ORANGE },
   floorCanvas: { position: 'relative', height: '100%', aspectRatio: '1 / 1', maxWidth: '100%', lineHeight: 0 },
   floorImg: { display: 'block', width: '100%', height: '100%', objectFit: 'contain' },
   floorPlaceholder: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center',
-    justifyContent: 'center', gap: 6, color: '#9aa0ad' },
+    justifyContent: 'center', gap: 8, color: TXT_DISABLED },
   floorPhIcon: { fontSize: 40 },
-  floorPhTxt: { fontSize: 15, fontWeight: 700, color: '#666' },
-  floorPhSub: { fontSize: 11, color: '#aab' },
+  floorPhTxt: { fontSize: 15, fontWeight: 700, color: TXT_SUBTLE },
+  floorPhSub: { fontSize: 12, color: TXT_DISABLED },
   routeSvg: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1, pointerEvents: 'none' },
+  pinTooltipWrap: { position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
+    marginBottom: 8, display: 'flex', flexDirection: 'column', alignItems: 'center', pointerEvents: 'none' },
+  pinTooltip: { whiteSpace: 'nowrap', background: TXT_DEFAULT, color: W, fontSize: 11, fontWeight: 600,
+    padding: '8px 10px', borderRadius: 6, boxShadow: '0 2px 6px rgba(0,0,0,0.3)' },
+  pinTooltipArrow: { width: 0, height: 0, borderLeft: '5px solid transparent', borderRight: '5px solid transparent',
+    borderTop: `5px solid ${TXT_DEFAULT}` },
   pin: { position: 'absolute', zIndex: 2, transform: 'translate(-50%,-50%)', width: 26, height: 26,
-    borderRadius: '50%', background: BLUE, color: '#fff', fontSize: 13, fontWeight: 700, border: '2px solid #fff',
+    borderRadius: '50%', background: 'rgba(255,115,13,0.6)', color: W, fontSize: 13, fontWeight: 700, border: `2px solid ${BG_PAGE}`,
     boxShadow: '0 2px 6px rgba(0,0,0,0.3)', cursor: 'pointer', display: 'flex', alignItems: 'center',
     justifyContent: 'center', lineHeight: 1 },
-  pinOn: { background: ORANGE, transform: 'translate(-50%,-50%) scale(1.3)', zIndex: 4 },
-  pinVisited: { background: '#b6bac6', border: '2px solid #eef0f5' },
+  pinOn: { background: ORANGE, transform: 'scale(1.3)', zIndex: 4 },
+  pinVisited: { background: BORDER_DEFAULT, border: `2px solid ${BG_MUTED}` },
   foot: { position: 'absolute', zIndex: 3, transform: 'translate(-50%,-50%)', fontSize: 15, lineHeight: 1,
     filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.35))', pointerEvents: 'none' },
   crossFloor: { position: 'absolute', zIndex: 5, transform: 'translate(-50%,-180%)', whiteSpace: 'nowrap',
-    background: BLUE, color: '#fff', fontSize: 10, fontWeight: 700, padding: '3px 7px', borderRadius: 10,
+    background: ORANGE, color: W, fontSize: 11, fontWeight: 600, padding: '4px 8px', borderRadius: 9999,
     boxShadow: '0 2px 6px rgba(0,0,0,0.3)', pointerEvents: 'none' },
 
   roomChips: { display: 'flex', gap: 8, overflowX: 'auto', padding: '10px 8px', flexShrink: 0, background: '#fff' },
@@ -653,14 +806,14 @@ const styles = {
   roomChipOn: { background: ORANGE, border: `1px solid ${ORANGE}`, color: '#fff' },
   roomChipVisited: { background: '#dfe1e8', border: '1px solid #dfe1e8', color: '#9298a6' },
 
-  stripHeader: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 2px 2px', fontSize: 13,
-    fontWeight: 700, color: '#1a1a2e', flexShrink: 0 },
-  stripHeaderCount: { fontSize: 11, fontWeight: 600, color: '#999' },
+  stripHeader: { display: 'flex', alignItems: 'center', gap: 8, padding: '12px 4px 4px', fontSize: 14,
+    fontWeight: 700, color: TXT_STRONG, flexShrink: 0 },
+  stripHeaderCount: { fontSize: 12, fontWeight: 400, color: TXT_SUBTLE },
   strip: { display: 'flex', gap: 10, overflowX: 'auto', padding: '8px 0 4px', flexShrink: 0 },
   stripCard: { flexShrink: 0, width: 92, background: 'none', border: 'none', padding: 0, cursor: 'pointer' },
-  stripThumb: { position: 'relative', width: 92, height: 72, borderRadius: 8, overflow: 'hidden', background: '#e5e5ea',
+  stripThumb: { position: 'relative', width: 92, height: 72, borderRadius: 8, overflow: 'hidden', background: BG_MUTED,
     border: '2px solid transparent' },
-  stripThumbOn: { border: `3px solid ${ORANGE}`, boxShadow: '0 0 0 3px rgba(242,153,74,0.25)' },
+  stripThumbOn: { border: `3px solid ${ORANGE}`, boxShadow: `0 0 0 3px ${ORANGE_LIGHT}` },
   stripNo: { position: 'absolute', top: 4, left: 4, zIndex: 2, minWidth: 16, height: 16, padding: '0 4px',
     borderRadius: 8, background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: 10, fontWeight: 700,
     display: 'flex', alignItems: 'center', justifyContent: 'center' },
@@ -670,24 +823,59 @@ const styles = {
   eqBar: { width: 3, background: '#fff', borderRadius: 2, transformOrigin: 'bottom',
     animation: 'eq 0.8s ease-in-out infinite' },
   nowPlayTxt: { position: 'absolute', bottom: 5, fontSize: 9, fontWeight: 700, color: '#fff', letterSpacing: 0.5 },
-  stripName: { fontSize: 11, color: '#444', marginTop: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+  stripName: { fontSize: 12, color: TXT_DEFAULT, marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
     textAlign: 'left' },
   stripNameOn: { color: ORANGE, fontWeight: 700 },
 
   navBar: { display: 'flex', gap: 10, marginTop: 10, flexShrink: 0 },
-  navBtn: { flex: 1, padding: '14px', borderRadius: 12, border: '1px solid #e0e0e6', background: '#fff', color: '#555',
+  navBtn: { flex: 1, padding: '14px', borderRadius: 12, border: `1px solid ${BORDER_DEFAULT}`, background: BG_PAGE, color: TXT_STRONG,
     fontSize: 15, fontWeight: 600, cursor: 'pointer' },
-  navBtnPrimary: { background: ORANGE, border: `1px solid ${ORANGE}`, color: '#fff' },
-  navBtnDisabled: { background: '#e5e5ea', border: '1px solid #e5e5ea', color: '#aaa', cursor: 'default' },
+  navBtnPrimary: { background: ORANGE, border: `1px solid ${ORANGE}`, color: W },
+  navBtnDisabled: { background: BORDER_DEFAULT, border: `1px solid ${BORDER_DEFAULT}`, color: TXT_DISABLED, cursor: 'default' },
 
+  listFilter: { height: 34, padding: '0 12px', borderRadius: 9999, border: `1px solid ${BORDER_DEFAULT}`,
+    background: BG_PAGE, color: TXT_STRONG, fontSize: 13, fontWeight: 400, cursor: 'pointer',
+    display: 'flex', alignItems: 'center' },
+  listFilterOn: { background: ORANGE, borderColor: ORANGE, color: W, fontWeight: 700 },
   listBody: { flex: 1, overflow: 'auto', padding: '8px 8px 16px' },
   listItem: { display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '12px 12px', borderRadius: 12,
     border: 'none', background: 'none', cursor: 'pointer' },
-  listItemOn: { background: '#eef2ff' },
-  listNo: { width: 26, height: 26, borderRadius: '50%', background: '#e5e5ea', color: '#888', fontSize: 12, fontWeight: 700,
+  listItemOn: { background: ORANGE_LIGHT },
+  listNo: { width: 26, height: 26, borderRadius: '50%', background: BG_MUTED, color: TXT_SUBTLE, fontSize: 12, fontWeight: 700,
     display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  listNoOn: { background: BLUE, color: '#fff' },
-  listTitle: { fontSize: 15, fontWeight: 600, color: '#1a1a2e' },
-  listSub: { fontSize: 12, color: '#999', marginTop: 2 },
-  listDur: { fontSize: 12, color: '#bbb', flexShrink: 0 },
+  listNoOn: { background: ORANGE, color: W },
+  listTitle: { fontSize: 15, fontWeight: 600, color: TXT_STRONG },
+  listSub: { fontSize: 13, color: TXT_SUBTLE, marginTop: 2 },
+  listDur: { fontSize: 13, color: TXT_DISABLED, flexShrink: 0 },
+
+  dim: { position: 'absolute', inset: 0, zIndex: 50, background: 'rgba(0,0,0,0.50)' },
+  overlaySheet: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '60%', zIndex: 51,
+    background: BG_PAGE, borderRadius: '16px 16px 0 0', display: 'flex', flexDirection: 'column',
+    boxShadow: '0 -4px 12px rgba(0,0,0,0.30)' },
+  overlayHandle: { display: 'flex', alignItems: 'center', justifyContent: 'center', height: 28, flexShrink: 0 },
+  overlayHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    padding: '0 20px 12px', borderBottom: `1px solid ${BORDER_DEFAULT}`, flexShrink: 0 },
+  overlayTitle: { fontSize: 20, fontWeight: 600, color: TXT_STRONG },
+  overlayClose: { background: 'none', border: 'none', fontSize: 24, color: TXT_DEFAULT, cursor: 'pointer',
+    width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  overlayBody: { flex: 1, overflow: 'auto', padding: '20px 24px' },
+  overlayEmpty: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+    height: '100%' },
+  scriptBody: { lineHeight: 1.6 },
+  scriptTitle: { fontSize: 20, fontWeight: 600, color: TXT_STRONG, margin: '0 0 16px' },
+  scriptText: { fontSize: 16, color: TXT_DEFAULT, margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.6 },
+
+  settingsBody: { display: 'flex', flexDirection: 'column', gap: 20, paddingBottom: 20 },
+  settingsRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
+  settingsLabel: { fontSize: 16, fontWeight: 600, color: TXT_STRONG },
+  toggleTrack: { width: 44, height: 24, borderRadius: 9999, background: BORDER_DEFAULT, border: 'none',
+    cursor: 'pointer', position: 'relative', padding: 0 },
+  toggleTrackOn: { background: ORANGE },
+  toggleHandle: { width: 20, height: 20, borderRadius: '50%', background: W, position: 'absolute',
+    top: 2, left: 2, transition: 'left 150ms ease' },
+  toggleHandleOn: { left: 22 },
+  speedRow: { display: 'flex', gap: 8, flexWrap: 'wrap' },
+  speedBtn: { padding: '8px 16px', borderRadius: 8, border: `1px solid ${BORDER_DEFAULT}`,
+    background: BG_PAGE, color: TXT_STRONG, fontSize: 14, fontWeight: 600, cursor: 'pointer' },
+  speedBtnOn: { background: ORANGE, borderColor: ORANGE, color: W },
 };
