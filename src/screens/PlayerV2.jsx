@@ -37,6 +37,8 @@ export default function PlayerV2({
   const [autoplay, setAutoplay] = useState(false);
   const [liked, setLiked] = useState(false);
 
+  const [overlay, setOverlay] = useState(null); // 'comments' | 'script' | null
+
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [elapsed, setElapsed] = useState(0);
@@ -144,8 +146,8 @@ export default function PlayerV2({
           <div style={styles.topRight}>
             {!isFull && (
               <>
-                <button style={styles.topChip}>💬 댓글</button>
-                <button style={styles.topChip}>📄 스크립트</button>
+                <button style={styles.topChip} onClick={() => setOverlay('comments')}>💬 댓글</button>
+                <button style={styles.topChip} onClick={() => setOverlay('script')}>📄 스크립트</button>
               </>
             )}
             <button
@@ -299,6 +301,37 @@ export default function PlayerV2({
           </div>
         )}
       </div>
+
+      {/* ============ 댓글 / 스크립트 오버레이 시트 ============ */}
+      {overlay && (
+        <>
+          <div style={styles.dim} onClick={() => setOverlay(null)} />
+          <div style={styles.overlaySheet}>
+            <div style={styles.overlayHandle}>
+              <div style={styles.grabber} />
+            </div>
+            <div style={styles.overlayHeader}>
+              <span style={styles.overlayTitle}>
+                {overlay === 'comments' ? '댓글' : '스크립트'}
+              </span>
+              <button style={styles.overlayClose} onClick={() => setOverlay(null)}>✕</button>
+            </div>
+            <div style={styles.overlayBody}>
+              {overlay === 'comments' ? (
+                <div style={styles.overlayEmpty}>
+                  <span style={{ fontSize: 32 }}>💬</span>
+                  <p style={{ margin: '12px 0 0', color: '#999', fontSize: 14 }}>아직 댓글이 없습니다</p>
+                </div>
+              ) : (
+                <div style={styles.scriptBody}>
+                  <h3 style={styles.scriptTitle}>{artwork.title}</h3>
+                  <p style={styles.scriptText}>{artwork.description || '스크립트가 준비되지 않았습니다.'}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -618,4 +651,22 @@ const styles = {
   listTitle: { fontSize: 15, fontWeight: 600, color: '#1a1a2e' },
   listSub: { fontSize: 12, color: '#999', marginTop: 2 },
   listDur: { fontSize: 12, color: '#bbb', flexShrink: 0 },
+
+  // 오버레이 시트
+  dim: { position: 'absolute', inset: 0, zIndex: 50, background: 'rgba(0,0,0,0.5)' },
+  overlaySheet: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '60%', zIndex: 51,
+    background: '#fff', borderRadius: '18px 18px 0 0', display: 'flex', flexDirection: 'column',
+    boxShadow: '0 -8px 30px rgba(0,0,0,0.3)' },
+  overlayHandle: { display: 'flex', alignItems: 'center', justifyContent: 'center', height: 28, flexShrink: 0 },
+  overlayHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    padding: '0 20px 12px', borderBottom: '1px solid #eee', flexShrink: 0 },
+  overlayTitle: { fontSize: 17, fontWeight: 700, color: '#1a1a2e' },
+  overlayClose: { background: 'none', border: 'none', fontSize: 18, color: '#999', cursor: 'pointer',
+    width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  overlayBody: { flex: 1, overflow: 'auto', padding: '20px' },
+  overlayEmpty: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+    height: '100%' },
+  scriptBody: { lineHeight: 1.7 },
+  scriptTitle: { fontSize: 16, fontWeight: 700, color: '#1a1a2e', margin: '0 0 12px' },
+  scriptText: { fontSize: 14, color: '#444', margin: 0, whiteSpace: 'pre-wrap' },
 };
