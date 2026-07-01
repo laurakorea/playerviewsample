@@ -223,7 +223,7 @@ export default function PlayerV2({
 
         {isFull ? (
           <div style={styles.fullWrap}>
-            <div style={{ ...styles.artBig, width: '100%', aspectRatio: '16 / 9', margin: '0', borderRadius: 0, boxShadow: 'none' }}>
+            <div style={{ ...styles.artBig, width: '100%', height: '80vw', aspectRatio: 'unset', margin: '0', borderRadius: 0, boxShadow: 'none', background: 'none' }}>
               <ArtImage src={artwork.imageSrc} alt={artwork.title} />
               {artwork.star && <span style={styles.badge}>핵심</span>}
             </div>
@@ -302,7 +302,7 @@ export default function PlayerV2({
       {/* ============ 지도 바텀시트 ============ */}
       <div style={{ ...styles.sheet, height: sheetH, transition: sheetTrans }}>
         {/* 시트 우하단 고정 탭 토글 */}
-        <div style={{ ...styles.sheetTabToggleFixed, bottom: pinActive ? 150 : 16, transition: 'bottom 0.3s cubic-bezier(0.4,0,0.2,1)' }}>
+        <div style={{ ...styles.sheetTabToggleFixed, bottom: pinActive ? 150 : 16, transition: 'bottom 0.3s cubic-bezier(0.4,0,0.2,1)', display: (tab === 'map' && pinActive) ? 'none' : 'flex' }}>
           <button style={{ ...styles.sheetTabBtn, ...(tab === 'map' ? styles.sheetTabBtnOn : {}) }}
                   onClick={() => { setTab('map'); setPinActive(false); }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ marginRight: 4, verticalAlign: 'middle' }}>
@@ -343,6 +343,14 @@ export default function PlayerV2({
               </div>
               {!pinActive && (
                 <div style={{ position: 'absolute', left: 10, bottom: 10, zIndex: 6, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
+                  <button
+                    style={{ ...styles.myLocationBtn, ...(showRoute ? styles.mapTopBtnOn : {}) }}
+                    onClick={() => setShowRoute(r => !r)}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 -960 960 960" fill="currentColor" style={{ transform: 'rotate(90deg)' }}>
+                      <path d="M247-167q-47-47-47-113v-327q-35-13-57.5-43.5T120-720q0-50 35-85t85-35q50 0 85 35t35 85q0 39-22.5 69.5T280-607v327q0 33 23.5 56.5T360-200q33 0 56.5-23.5T440-280v-400q0-66 47-113t113-47q66 0 113 47t47 113v327q35 13 57.5 43.5T840-240q0 50-35 85t-85 35q-50 0-85-35t-35-85q0-39 22.5-70t57.5-43v-327q0-33-23.5-56.5T600-760q-33 0-56.5 23.5T520-680v400q0 66-47 113t-113 47q-66 0-113-47Z"/>
+                    </svg>
+                  </button>
                   <button style={{ ...styles.myLocationBtn, ...(viewingMyLocation ? styles.myLocationBtnOn : {}) }} onClick={() => {
                     if (viewingMyLocation) {
                       goTourFnRef.current?.();
@@ -368,12 +376,6 @@ export default function PlayerV2({
                       </svg>
                     )}
                   </button>
-                  <button
-                    style={{ ...styles.mapTopBtn, ...(showRoute ? styles.mapTopBtnOn : {}) }}
-                    onClick={() => setShowRoute(r => !r)}
-                  >
-                    {showRoute ? '경로 끄기' : '경로 켜기'}
-                  </button>
                 </div>
               )}
             </div>
@@ -381,6 +383,11 @@ export default function PlayerV2({
             {snap >= 1 && pinActive && (
               <div style={styles.stripOverlay}>
                 <div style={styles.pinActionBar}>
+                  <button style={{ ...styles.myLocationBtn, ...(showRoute ? styles.mapTopBtnOn : {}) }} onClick={() => setShowRoute(r => !r)}>
+                    <svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 -960 960 960" fill="currentColor" style={{ transform: 'rotate(90deg)' }}>
+                      <path d="M247-167q-47-47-47-113v-327q-35-13-57.5-43.5T120-720q0-50 35-85t85-35q50 0 85 35t35 85q0 39-22.5 69.5T280-607v327q0 33 23.5 56.5T360-200q33 0 56.5-23.5T440-280v-400q0-66 47-113t113-47q66 0 113 47t47 113v327q35 13 57.5 43.5T840-240q0 50-35 85t-85 35q-50 0-85-35t-35-85q0-39 22.5-70t57.5-43v-327q0-33-23.5-56.5T600-760q-33 0-56.5 23.5T520-680v400q0 66-47 113t-113 47q-66 0-113-47Z"/>
+                    </svg>
+                  </button>
                   <button style={{ ...styles.myLocationBtn, ...(viewingMyLocation ? styles.myLocationBtnOn : {}) }} onClick={() => {
                     if (viewingMyLocation) {
                       goTourFnRef.current?.();
@@ -407,9 +414,6 @@ export default function PlayerV2({
                     )}
                   </button>
                   <button style={styles.mapTopBtn} onClick={() => setShowNavModal(true)}>길찾기</button>
-                  <button style={{ ...styles.mapTopBtn, ...(showRoute ? styles.mapTopBtnOn : {}) }} onClick={() => setShowRoute(r => !r)}>
-                    {showRoute ? '경로 끄기' : '경로 켜기'}
-                  </button>
                 </div>
                 <div style={styles.strip}>
                   {prevArtwork && (
