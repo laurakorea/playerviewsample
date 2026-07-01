@@ -721,6 +721,7 @@ function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, showRou
   const onMapTouchStart = (e) => {
     if (e.touches.length === 2) {
       pinchRef.current = { pinching: true, startDist: getTouchDist(e.touches), startZoom: zoom };
+      onMapClick?.();
     } else if (e.touches.length === 1 && zoom > 1) {
       panRef.current = { dragging: true, startX: e.touches[0].clientX, startY: e.touches[0].clientY, startPanX: pan.x, startPanY: pan.y };
     }
@@ -1158,7 +1159,7 @@ const styles = {
     boxShadow: '0 2px 6px rgba(0,0,0,0.3)', cursor: 'pointer', display: 'flex', alignItems: 'center',
     justifyContent: 'center', lineHeight: 1 },
   pinOn: { background: ORANGE, transform: 'scale(1.3)', zIndex: 4 },
-  pinVisited: { background: TXT_DISABLED, border: `2px solid ${BG_MUTED}` },
+  pinVisited: { background: TXT_DISABLED, border: `2px solid ${BG_MUTED}`, opacity: 0.7 },
   pinPlayingBadge: { position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
     marginBottom: 3, display: 'flex', alignItems: 'flex-end', gap: 2, padding: '0 1px' },
   pinEqBar: { width: 3, background: W, borderRadius: 2, display: 'inline-block',
