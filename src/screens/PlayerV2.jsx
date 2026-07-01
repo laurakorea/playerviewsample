@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { decodeWKBPoint } from '../utils/geo';
 
-const SHEET_VH = [0, 74, 90];
+const SHEET_VH = [0, 68, 90];
 
 const MAPS_API_KEY = 'AIzaSyA08FbqWiPl8VfF8aDcP9yhgCCJj6EqU58';
 let mapsPromise = null;
@@ -40,6 +40,7 @@ export default function PlayerV2({
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [showRoute, setShowRoute] = useState(true);
+  const [showNavModal, setShowNavModal] = useState(false);
   const [autoplay, setAutoplay] = useState(false);
   const [speed, setSpeed] = useState(1);
   const [likedIds, setLikedIds] = useState(new Set());
@@ -189,6 +190,20 @@ export default function PlayerV2({
   return (
     <div style={styles.root}>
       {mediaEl}
+      {/* 길찾기 모달 */}
+      {showNavModal && (
+        <div style={styles.navModalBackdrop} onClick={() => setShowNavModal(false)}>
+          <div style={styles.navModal} onClick={e => e.stopPropagation()}>
+            <p style={styles.navModalText}>'투어라이브'에서 'Google Maps'을(를) 열려고 합니다</p>
+            <div style={styles.navModalDivider} />
+            <div style={styles.navModalBtns}>
+              <button style={styles.navModalCancel} onClick={() => setShowNavModal(false)}>취소</button>
+              <div style={styles.navModalBtnDivider} />
+              <button style={styles.navModalConfirm} onClick={() => setShowNavModal(false)}>열기</button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* ============ 플레이어 레이어 ============ */}
       <div style={{ ...styles.player, bottom: sheetH, transition: `bottom ${sheetTrans.includes('none') ? '0s' : '0.32s cubic-bezier(0.4,0,0.2,1)'}` }}>
         <div style={styles.topBar}>
@@ -208,12 +223,9 @@ export default function PlayerV2({
 
         {isFull ? (
           <div style={styles.fullWrap}>
-            <div style={styles.artBig} onClick={playPause}>
+            <div style={{ ...styles.artBig, width: '100%', aspectRatio: '16 / 9', margin: '0', borderRadius: 0, boxShadow: 'none' }}>
               <ArtImage src={artwork.imageSrc} alt={artwork.title} />
               {artwork.star && <span style={styles.badge}>핵심</span>}
-              {hasMedia && (
-                <div style={styles.playOverlay}>{isPlaying ? '' : '▶'}</div>
-              )}
             </div>
             <div style={{ textAlign: 'left', margin: '12px 0 4px' }}>
               <span style={styles.count}>{artwork.subtitle || ''}</span>
@@ -289,6 +301,18 @@ export default function PlayerV2({
 
       {/* ============ 지도 바텀시트 ============ */}
       <div style={{ ...styles.sheet, height: sheetH, transition: sheetTrans }}>
+        {/* 시트 우하단 고정 탭 토글 */}
+        <div style={{ ...styles.sheetTabToggleFixed, bottom: pinActive ? 150 : 16, transition: 'bottom 0.3s cubic-bezier(0.4,0,0.2,1)' }}>
+          <button style={{ ...styles.sheetTabBtn, ...(tab === 'map' ? styles.sheetTabBtnOn : {}) }}
+                  onClick={() => { setTab('map'); setPinActive(false); }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ marginRight: 4, verticalAlign: 'middle' }}>
+                    <path d="M3 6L9 3L15 6L21 3V18L15 21L9 18L3 21V6Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/>
+                    <line x1="9" y1="3" x2="9" y2="18" stroke="currentColor" strokeWidth="2"/>
+                    <line x1="15" y1="6" x2="15" y2="21" stroke="currentColor" strokeWidth="2"/>
+                  </svg>지도</button>
+          <button style={{ ...styles.sheetTabBtn, ...(tab === 'list' ? styles.sheetTabBtnOn : {}) }}
+                  onClick={() => { setTab('list'); setPinActive(false); }}>☰ 목차</button>
+        </div>
         <div
           style={styles.handleZone}
           onPointerDown={onDown}
@@ -316,33 +340,10 @@ export default function PlayerV2({
                 onRegisterCenterPin={(fn) => { centerPinFnRef.current = fn; }}
               />
               <div style={styles.mapTopBar}>
-                <button style={styles.tocBtn} onClick={() => setTab('list')}>☰ 목차</button>
-                <button
-                  style={{ ...styles.mapTopBtn, ...(showRoute ? styles.mapTopBtnOn : {}) }}
-                  onClick={() => setShowRoute(r => !r)}
-                >
-                  {showRoute ? '경로 끄기' : '경로 켜기'}
-                </button>
               </div>
               {!pinActive && (
-                <button style={styles.myLocationBtn} onClick={() => {
-                  if (viewingMyLocation) {
-                    goTourFnRef.current?.();
-                    setViewingMyLocation(false);
-                  } else {
-                    myLocationFnRef.current?.();
-                    setViewingMyLocation(true);
-                  }
-                }}>
-                  {viewingMyLocation ? '← 투어로 돌아가기' : '📍 내 위치'}
-                </button>
-              )}
-            </div>
-
-            {snap >= 1 && pinActive && (
-              <div style={styles.stripOverlay}>
-                <div style={styles.pinActionBar}>
-                  <button style={styles.mapTopBtn} onClick={() => {
+                <div style={{ position: 'absolute', left: 10, bottom: 10, zIndex: 6, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
+                  <button style={{ ...styles.myLocationBtn, ...(viewingMyLocation ? styles.myLocationBtnOn : {}) }} onClick={() => {
                     if (viewingMyLocation) {
                       goTourFnRef.current?.();
                       setViewingMyLocation(false);
@@ -351,9 +352,64 @@ export default function PlayerV2({
                       setViewingMyLocation(true);
                     }
                   }}>
-                    {viewingMyLocation ? '← 투어로 돌아가기' : '📍 내 위치'}
+                    {viewingMyLocation ? (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M9 14L4 9L9 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        <path d="M4 9H15C17.7614 9 20 11.2386 20 14V20" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                      </svg>
+                    ) : (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="12" cy="12" r="4" fill="currentColor"/>
+                        <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="2" fill="none"/>
+                        <line x1="12" y1="2" x2="12" y2="5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                        <line x1="12" y1="19" x2="12" y2="22" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                        <line x1="2" y1="12" x2="5" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                        <line x1="19" y1="12" x2="22" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                      </svg>
+                    )}
                   </button>
-                  <button style={styles.mapTopBtn}>길찾기</button>
+                  <button
+                    style={{ ...styles.mapTopBtn, ...(showRoute ? styles.mapTopBtnOn : {}) }}
+                    onClick={() => setShowRoute(r => !r)}
+                  >
+                    {showRoute ? '경로 끄기' : '경로 켜기'}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {snap >= 1 && pinActive && (
+              <div style={styles.stripOverlay}>
+                <div style={styles.pinActionBar}>
+                  <button style={{ ...styles.myLocationBtn, ...(viewingMyLocation ? styles.myLocationBtnOn : {}) }} onClick={() => {
+                    if (viewingMyLocation) {
+                      goTourFnRef.current?.();
+                      setViewingMyLocation(false);
+                    } else {
+                      myLocationFnRef.current?.();
+                      setViewingMyLocation(true);
+                    }
+                  }}>
+                    {viewingMyLocation ? (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M9 14L4 9L9 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        <path d="M4 9H15C17.7614 9 20 11.2386 20 14V20" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                      </svg>
+                    ) : (
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="12" cy="12" r="4" fill="currentColor"/>
+                        <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="2" fill="none"/>
+                        <line x1="12" y1="2" x2="12" y2="5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                        <line x1="12" y1="19" x2="12" y2="22" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                        <line x1="2" y1="12" x2="5" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                        <line x1="19" y1="12" x2="22" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                      </svg>
+                    )}
+                  </button>
+                  <button style={styles.mapTopBtn} onClick={() => setShowNavModal(true)}>길찾기</button>
+                  <button style={{ ...styles.mapTopBtn, ...(showRoute ? styles.mapTopBtnOn : {}) }} onClick={() => setShowRoute(r => !r)}>
+                    {showRoute ? '경로 끄기' : '경로 켜기'}
+                  </button>
                 </div>
                 <div style={styles.strip}>
                   {prevArtwork && (
@@ -411,13 +467,13 @@ export default function PlayerV2({
         ) : (
           <div style={styles.listWrap}>
             <div style={styles.listHeader}>
-              <div style={{ ...styles.listTopBar, position: 'relative' }}>
-                <button style={styles.tocBtnList} onClick={() => setTab('map')}>🗺 지도</button>
-                <button style={{ ...styles.listFilter, ...(listFilter === 'all' ? styles.listFilterOn : {}) }}
-                        onClick={() => setListFilter('all')}>전체</button>
-
-                <button style={{ ...styles.listFilter, ...(listFilter === 'liked' ? styles.listFilterOn : {}) }}
-                        onClick={() => setListFilter('liked')}>♡ 좋아요</button>
+              <div style={styles.listTopBarOuter}>
+                <div style={styles.listTopBar}>
+                  <button style={{ ...styles.listFilter, ...(listFilter === 'all' ? styles.listFilterOn : {}) }}
+                          onClick={() => setListFilter('all')}>전체</button>
+                  <button style={{ ...styles.listFilter, ...(listFilter === 'liked' ? styles.listFilterOn : {}) }}
+                          onClick={() => setListFilter('liked')}>♡ 좋아요</button>
+                </div>
                 {!searchOpen && (
                   <button style={styles.searchIconAbsBtn} onClick={() => setSearchOpen(true)}>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -817,6 +873,11 @@ function MapView({ artworks, currentIndex, playingIndex, snap, showRoute, pinAct
     routeRef.current?.setVisible(showRoute);
     const segPath = segRouteRef.current?.getPath()?.getLength() > 1;
     segRouteRef.current?.setVisible(showRoute && !!segPath);
+    const playIdx = playingIndex ?? -1;
+    markersRef.current.forEach(({ m, i }) => {
+      const isPlaying = i === playIdx;
+      m.setLabel(isPlaying || !showRoute ? null : { text: String(i + 1), color: '#fff', fontSize: '11px', fontWeight: '700' });
+    });
   }, [showRoute]);
 
   useEffect(() => {
@@ -868,8 +929,8 @@ const styles = {
   gearBtn: { background: 'rgba(255,255,255,0.15)', border: 'none', color: W, fontSize: 18, width: 36, height: 36, borderRadius: 9999, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
 
   fullWrap: { flex: 1, display: 'flex', flexDirection: 'column', padding: '4px 20px 16px', overflow: 'auto' },
-  artBig: { position: 'relative', width: '72%', aspectRatio: '3 / 4', margin: '6px auto 0', borderRadius: 8, overflow: 'hidden', background: TXT_DEFAULT, boxShadow: '0 12px 40px rgba(0,0,0,0.6)' },
-  artImg: { width: '100%', height: '100%', objectFit: 'cover' },
+  artBig: { position: 'relative', width: '80%', aspectRatio: '1 / 1', margin: '6px auto 0', borderRadius: 8, overflow: 'hidden', background: '#2a2a2a', boxShadow: '0 12px 40px rgba(0,0,0,0.6)' },
+  artImg: { width: '100%', height: '100%', objectFit: 'contain' },
   coverImg: { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' },
   containImg: { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' },
   miniBlurBg: { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(28px)', transform: 'scale(1.2)', opacity: 0.5 },
@@ -924,7 +985,16 @@ const styles = {
   miniBarPlay: { width: 40, height: 40, borderRadius: '50%', background: W, color: PLAYER_BG, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none' },
 
   sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, background: BG_MUTED, borderRadius: '16px 16px 0 0', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 -4px 12px rgba(0,0,0,0.3)' },
-  handleZone: { display: 'flex', alignItems: 'center', justifyContent: 'center', height: 34, cursor: 'grab', touchAction: 'none', flexShrink: 0 },
+  handleZone: { display: 'flex', alignItems: 'center', justifyContent: 'center', height: 20, cursor: 'grab', touchAction: 'none', flexShrink: 0 },
+  sheetTabBar: { display: 'flex', alignItems: 'center', padding: '6px 14px 6px', flexShrink: 0 },
+  sheetTabToggleFixed: { position: 'absolute', right: 16, bottom: 16, zIndex: 20, display: 'flex',
+    background: BG_PAGE, borderRadius: 9999, padding: 3, gap: 2,
+    border: `1px solid ${BORDER_DEFAULT}`, boxShadow: '0 2px 8px rgba(0,0,0,0.15)' },
+  sheetTabToggle: { display: 'flex', background: BG_MUTED, borderRadius: 9999, padding: 3, gap: 2,
+    border: `1px solid ${BORDER_DEFAULT}` },
+  sheetTabBtn: { padding: '5px 12px', borderRadius: 9999, border: 'none', background: 'transparent',
+    fontSize: 13, fontWeight: 600, color: TXT_SUBTLE, cursor: 'pointer' },
+  sheetTabBtnOn: { background: '#1a1a1a', color: '#fff', boxShadow: '0 1px 6px rgba(0,0,0,0.2)' },
   grabber: { width: 52, height: 6, borderRadius: 9999, background: BORDER_DEFAULT },
 
   sheetBody: { position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 },
@@ -934,10 +1004,19 @@ const styles = {
   mapTopBtn: { height: 34, padding: '0 12px', borderRadius: 9999, border: `1px solid ${BORDER_DEFAULT}`, background: BG_PAGE, color: TXT_STRONG, fontSize: 13, fontWeight: 600, cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', outline: 'none' },
   mapTopBtnOn: { background: W, border: `1.5px solid ${ORANGE}`, color: ORANGE },
 
+  navModalBackdrop: { position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)' },
+  navModal: { background: '#f2f2f7', borderRadius: 14, width: 270, overflow: 'hidden' },
+  navModalText: { margin: 0, padding: '20px 16px 16px', textAlign: 'center', fontSize: 14, color: '#000', lineHeight: 1.5 },
+  navModalDivider: { height: 1, background: 'rgba(0,0,0,0.15)' },
+  navModalBtns: { display: 'flex' },
+  navModalBtnDivider: { width: 1, background: 'rgba(0,0,0,0.15)' },
+  navModalCancel: { flex: 1, padding: '12px 0', border: 'none', background: 'none', fontSize: 17, color: '#007aff', cursor: 'pointer' },
+  navModalConfirm: { flex: 1, padding: '12px 0', border: 'none', background: 'none', fontSize: 17, fontWeight: 600, color: '#007aff', cursor: 'pointer' },
   stripOverlay: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 5, padding: '0 16px 16px', background: 'linear-gradient(transparent, rgba(255,255,255,1) 80%, rgb(255,255,255) 100%)' },
-  pinActionBar: { display: 'flex', gap: 8, padding: '8px 0 4px' },
-  myLocationBtn: { position: 'absolute', left: 12, bottom: 16, zIndex: 6, height: 34, padding: '0 12px', borderRadius: 9999, border: `1px solid ${BORDER_DEFAULT}`, background: BG_PAGE, color: TXT_STRONG, fontSize: 13, fontWeight: 600, cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', outline: 'none' },
-  strip: { display: 'flex', gap: 10, overflowX: 'auto', padding: '4px 0 8px', flexShrink: 0 },
+  pinActionBar: { display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8, padding: '8px 0 4px' },
+  myLocationBtn: { width: 36, height: 36, borderRadius: '50%', border: `1px solid ${BORDER_DEFAULT}`, background: BG_PAGE, color: TXT_STRONG, cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', outline: 'none', flexShrink: 0 },
+  myLocationBtnOn: { background: BG_PAGE, border: `1.5px solid ${ORANGE}`, color: ORANGE },
+  strip: { display: 'flex', gap: 2, overflowX: 'auto', padding: '4px 0 8px', flexShrink: 0 },
   stripCard: { flexShrink: 0, width: 92, background: 'none', border: 'none', padding: 0, cursor: 'pointer' },
   stripThumb: { position: 'relative', width: 92, height: 92, borderRadius: 10, overflow: 'hidden', background: BG_MUTED, border: '2px solid transparent' },
   stripThumbOn: { border: `3px solid ${ORANGE}`, boxShadow: `0 0 0 2px ${ORANGE_LIGHT}` },
@@ -955,13 +1034,17 @@ const styles = {
 
   listWrap: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 },
   listHeader: { flexShrink: 0, background: BG_MUTED },
-  listTopBar: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px 6px', background: BG_MUTED },
+  listTopBarOuter: { display: 'flex', alignItems: 'center', padding: '10px 12px 6px',
+    background: BG_MUTED, gap: 4 },
+  listTopBar: { display: 'flex', alignItems: 'center', gap: 8, flex: 1,
+    overflowX: 'auto', flexWrap: 'nowrap', WebkitOverflowScrolling: 'touch',
+    scrollbarWidth: 'none', msOverflowStyle: 'none' },
   listSecondBar: { display: 'flex', alignItems: 'center', gap: 8, padding: '0 12px 8px', background: BG_MUTED, justifyContent: 'flex-end' },
   tocBtnList: { height: 34, padding: '0 12px', borderRadius: 9999, background: TXT_STRONG, color: W, fontSize: 13, fontWeight: 700, border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', outline: 'none' },
   listFilter: { height: 34, padding: '0 12px', borderRadius: 9999, border: `1px solid ${BORDER_DEFAULT}`, background: BG_PAGE, color: TXT_STRONG, fontSize: 13, fontWeight: 400, cursor: 'pointer', display: 'flex', alignItems: 'center', outline: 'none' },
   listFilterOn: { background: W, border: `1.5px solid ${ORANGE}`, color: ORANGE, fontWeight: 700 },
   searchIconBtn: { width: 36, height: 36, border: 'none', background: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, outline: 'none' },
-  searchIconAbsBtn: { position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', width: 36, height: 36, border: 'none', background: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', outline: 'none' },
+  searchIconAbsBtn: { flexShrink: 0, width: 36, height: 36, border: 'none', background: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', outline: 'none' },
   searchBar: { flex: 1, display: 'flex', alignItems: 'center', gap: 8, height: 38, border: `1.5px solid ${ORANGE}`, borderRadius: 9999, padding: '0 14px', background: BG_PAGE },
   searchInput: { flex: 1, border: 'none', outline: 'none', background: 'none', fontSize: 14, color: TXT_STRONG, fontFamily: 'inherit' },
   searchCancelBtn: { flexShrink: 0, border: 'none', background: 'none', fontSize: 14, fontWeight: 500, color: TXT_DEFAULT, cursor: 'pointer', outline: 'none', padding: '0 4px' },
