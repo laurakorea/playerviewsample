@@ -288,7 +288,7 @@ export default function OrsayPlayer({
       {/* ============ 지도 바텀시트 ============ */}
       <div style={{ ...styles.sheet, height: sheetH, transition: sheetTrans }}>
         {/* 시트 우하단 고정 탭 토글 */}
-        <div style={{ ...styles.sheetTabToggleFixed, bottom: (pinActive && !!activeStop) ? 162 : 16, transition: 'bottom 0.3s cubic-bezier(0.4,0,0.2,1)' }}>
+        <div style={{ ...styles.sheetTabToggleFixed, bottom: (pinActive && !!activeStop) ? 162 : 16, transition: 'bottom 0.3s cubic-bezier(0.4,0,0.2,1)', display: (tab === 'map' && pinActive) ? 'none' : 'flex' }}>
           <button style={{ ...styles.sheetTabBtn, ...(tab === 'map' ? styles.sheetTabBtnOn : {}) }}
                   onClick={() => { setTab('map'); setPinActive(false); }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ marginRight: 4, verticalAlign: 'middle' }}>
@@ -924,6 +924,13 @@ function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, showRou
 
       {/* 좌측 하단 버튼 그룹: 경로 + 층 선택 */}
       <div style={{ position: 'absolute', left: 10, zIndex: 6, bottom: stripActive ? 162 : 10, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8, transition: 'bottom 0.3s cubic-bezier(0.4,0,0.2,1)' }}>
+        <button
+          style={{ ...styles.mapIconBtn, ...(showRoute ? styles.mapTopBtnOn : {}) }}
+          onClick={e => { e.stopPropagation(); onToggleRoute?.(); }}>
+          <svg xmlns="http://www.w3.org/2000/svg" height="18" width="18" viewBox="0 -960 960 960" fill="currentColor" style={{ transform: 'rotate(90deg)' }}>
+            <path d="M247-167q-47-47-47-113v-327q-35-13-57.5-43.5T120-720q0-50 35-85t85-35q50 0 85 35t35 85q0 39-22.5 69.5T280-607v327q0 33 23.5 56.5T360-200q33 0 56.5-23.5T440-280v-400q0-66 47-113t113-47q66 0 113 47t47 113v327q35 13 57.5 43.5T840-240q0 50-35 85t-85 35q-50 0-85-35t-35-85q0-39 22.5-70t57.5-43v-327q0-33-23.5-56.5T600-760q-33 0-56.5 23.5T520-680v400q0 66-47 113t-113 47q-66 0-113-47Z"/>
+          </svg>
+        </button>
         <div style={styles.floorPill}>
           {floors.slice().reverse().map(f => (
             <button key={f}
@@ -933,11 +940,6 @@ function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, showRou
             </button>
           ))}
         </div>
-        <button
-          style={{ ...styles.mapTopBtn, ...(showRoute ? styles.mapTopBtnOn : {}) }}
-          onClick={e => { e.stopPropagation(); onToggleRoute?.(); }}>
-          {showRoute ? '경로 끄기' : '경로 켜기'}
-        </button>
       </div>
 
     </div>
@@ -1085,6 +1087,9 @@ const styles = {
   mapTopBtn: { height: 34, padding: '0 12px', borderRadius: 9999, border: `1px solid ${BORDER_DEFAULT}`,
     background: BG_PAGE, color: TXT_STRONG, fontSize: 13, fontWeight: 600, cursor: 'pointer',
     boxShadow: '0 2px 8px rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', outline: 'none' },
+  mapIconBtn: { width: 34, height: 34, padding: 0, borderRadius: 9999, border: `1px solid ${BORDER_DEFAULT}`,
+    background: BG_PAGE, color: TXT_STRONG, cursor: 'pointer',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', outline: 'none' },
   mapTopBtnOn: { background: W, border: `1.5px solid ${ORANGE}`, color: ORANGE },
   listWrap: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 },
   listHeader: { flexShrink: 0, background: BG_MUTED },
