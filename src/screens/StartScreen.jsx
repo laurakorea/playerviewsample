@@ -50,6 +50,14 @@ export default function StartScreen({ onStart, onStart2, onStartOrsay }) {
         </div>
       </div>
 
+      <button style={styles.startBtn2} onClick={onStart2}>
+        경복궁 투어 시작
+      </button>
+      <button style={styles.orsayBtn} onClick={onStartOrsay}>
+        🇫🇷 오르세 투어 시작하기
+      </button>
+      <p style={styles.hint}>이어폰을 연결하면 더 좋아요 🎧</p>
+
       <div style={styles.routePreview}>
         <div style={styles.routeLabel}>투어 경로</div>
         <div style={styles.routeItems}>
@@ -65,16 +73,9 @@ export default function StartScreen({ onStart, onStart2, onStartOrsay }) {
         </div>
       </div>
 
-      <button style={styles.startBtn} onClick={onStart}>
+      <button style={{ ...styles.startBtn, marginTop: 28 }} onClick={onStart}>
         투어 시작하기
       </button>
-      <button style={styles.startBtn2} onClick={onStart2}>
-        투어 시작하기 2
-      </button>
-      <button style={styles.orsayBtn} onClick={onStartOrsay}>
-        🇫🇷 오르세 투어 시작하기
-      </button>
-      <p style={styles.hint}>이어폰을 연결하면 더 좋아요 🎧</p>
     </div>
   );
 }

@@ -93,7 +93,7 @@ export default function App() {
       )}
       {screen === 'v2' && (
         <PlayerV2
-          artwork={currentArtwork}
+          artwork={artworks[currentIndex]}
           artworks={artworks}
           currentIndex={currentIndex}
           total={artworks.length}

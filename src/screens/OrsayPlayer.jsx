@@ -2,21 +2,41 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { orsayFloorMaps, orsayRoomPins } from '../data/orsayTourData';
 
 // 스냅별 시트 높이 (뷰포트 높이 대비 %)
-//  0: 지도 닫힘 → 풀 플레이어 / 1: 중간 / 2: 지도 크게
-const SHEET_VH = [0, 52, 74];
+//  0: 지도 닫힘 → 풀 플레이어 / 1: 지도+스트립 / 2: 지도 크게(90%)
+const SHEET_VH = [0, 74, 90];
 
 export default function OrsayPlayer({
   artwork, artworks, currentIndex, total,
   onPrev, onNext, onHome, onSelectIndex,
 }) {
-  const [snap, setSnap] = useState(2);        // 진입 시 전체(지도+칩+스트립+버튼) 노출
+  const [snap, setSnap] = useState(0);        // 진입 시 전체 펼침(0%)
+  const [pinActive, setPinActive] = useState(false);
   const [dragH, setDragH] = useState(null);   // 드래그 중 px, 평소 null
   const [tab, setTab] = useState('map');      // 'map' | 'list'
   const [listFilter, setListFilter] = useState('all'); // 'all' | 'best' | 'liked'
+  const [floorFilter, setFloorFilter] = useState(null); // null = 전체, 1 | 2 | 5 — 레이블 표시용
+  const [floorDropOpen, setFloorDropOpen] = useState(false);
+  const listBodyRef = useRef(null);
+  const groupRefsMap = useRef({});
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [showRoute, setShowRoute] = useState(true);
   const [autoplay, setAutoplay] = useState(false);
   const [speed, setSpeed] = useState(1);
-  const [liked, setLiked] = useState(false);
+  const [likedIds, setLikedIds] = useState(new Set());
+  // 지도 탐색 인덱스 — 핀 클릭 시 이것만 바뀌고 재생 트랙(currentIndex)은 유지됨
+  const [browseIndex, setBrowseIndex] = useState(currentIndex);
+  // 재생 트랙이 외부(onPrev/onNext/onSelectIndex)에 의해 변경되면 탐색도 따라감
+  useEffect(() => { setBrowseIndex(currentIndex); }, [currentIndex]);
+  const isLiked = (id) => likedIds.has(id);
+  const toggleLike = (id, e) => {
+    e.stopPropagation();
+    setLikedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
 
   const [overlay, setOverlay] = useState(null); // 'comments' | 'script' | 'settings' | null
 
@@ -29,7 +49,8 @@ export default function OrsayPlayer({
   const dragRef = useRef({ dragging: false, startY: 0, startH: 0 });
 
   const isFull = snap === 0;
-  const hasAudio = !!artwork.audioSrc;
+  const mediaSrc = artwork.audioSrc || artwork.videoSrc || null;
+  const hasAudio = !!mediaSrc;
 
   // 방을 투어 순서대로 묶은 "순서 stop" 목록 (1번 ~ 마지막). 추가 작품(floor 없음)은 제외.
   const roomStops = useMemo(() => {
@@ -42,20 +63,29 @@ export default function OrsayPlayer({
     return [...m.values()].map((s, k) => ({ ...s, seq: k + 1 }));
   }, [artworks]);
 
-  // 현재 트랙이 속한 stop. 없으면(추가 작품) 추가 작품끼리 묶어서 노출.
-  const activeStop = roomStops.find(s => s.room === artwork.room && s.floor === artwork.floor) || null;
+  // 탐색 중인 방 기준으로 stop 계산 (재생 트랙과 독립)
+  const browseArtwork = artworks[browseIndex];
+  const activeStop = roomStops.find(s => s.room === browseArtwork?.room && s.floor === browseArtwork?.floor) || null;
   const stripIdxs = activeStop
     ? activeStop.idxs
     : artworks.map((a, i) => i).filter(i => !artworks[i].floor);
-  // 다음 장소(stop)
+  // 이전/다음 장소(stop)
+  const prevStop = activeStop ? roomStops.find(s => s.seq === activeStop.seq - 1) : null;
   const nextStop = activeStop ? roomStops.find(s => s.seq === activeStop.seq + 1) : roomStops[0];
 
+  const autoPlayOnSelectRef = useRef(false);
+
   useEffect(() => {
-    setIsPlaying(false);
     setProgress(0);
     setElapsed(0);
     setDuration(0);
     lastTimeRef.current = 0;
+    if (autoPlayOnSelectRef.current) {
+      autoPlayOnSelectRef.current = false;
+      setIsPlaying(true);
+    } else {
+      setIsPlaying(false);
+    }
   }, [artwork.id]);
 
   // 자동재생: 오디오 끝나면 다음 트랙으로
@@ -138,7 +168,7 @@ export default function OrsayPlayer({
   const audioEl = (
     <audio
       ref={audioRef}
-      src={artwork.audioSrc || undefined}
+      src={mediaSrc || undefined}
       onTimeUpdate={onTime}
       onLoadedMetadata={onMeta}
       onEnded={onEnded}
@@ -153,15 +183,17 @@ export default function OrsayPlayer({
       <div style={{ ...styles.player, bottom: sheetH, transition: `bottom ${sheetTrans.includes('none') ? '0s' : '0.32s cubic-bezier(0.4,0,0.2,1)'}` }}>
         {/* 상단 바 */}
         <div style={styles.topBar}>
-          <button style={styles.iconBtn} onClick={onHome}>⌄</button>
+          {snap !== 2 && <button style={styles.iconBtn} onClick={onHome}>⌄</button>}
           <div style={styles.topRight}>
-            {!isFull && (
+            {!isFull && snap !== 2 && (
               <>
-                <button style={styles.topChip} onClick={() => setOverlay('comments')}>💬 댓글</button>
-                <button style={styles.topChip} onClick={() => setOverlay('script')}>📄 스크립트</button>
+                <button style={styles.chip} onClick={() => setOverlay('comments')}>댓글</button>
+                <button style={styles.chip} onClick={() => setOverlay('script')}>스크립트</button>
               </>
             )}
-            <button style={styles.gearBtn} onClick={() => setOverlay('settings')}>⚙</button>
+            {snap !== 2 && (
+              <button style={styles.gearBtn} onClick={() => setOverlay('settings')}>⚙</button>
+            )}
           </div>
         </div>
 
@@ -175,8 +207,8 @@ export default function OrsayPlayer({
                 <div style={styles.playOverlay}>{isPlaying ? '' : '▶'}</div>
               )}
             </div>
-            <div style={styles.countRow}>
-              <span style={styles.count}>{currentIndex + 1} / {total} · {floorLabel(artwork)}</span>
+            <div style={{ textAlign: 'left', margin: '12px 0 4px' }}>
+              <span style={styles.count}>{floorLabel(artwork)}</span>
             </div>
 
             <div style={styles.titleRow}>
@@ -184,8 +216,8 @@ export default function OrsayPlayer({
                 <h2 style={styles.title}>{artwork.title}</h2>
                 <p style={styles.subtitle}>오르세 미술관 · {artwork.subtitle}</p>
               </div>
-              <button style={styles.heart} onClick={() => setLiked(l => !l)}>
-                {liked ? '♥' : '♡'}
+              <button style={{ ...styles.heart, color: isLiked(artwork.id) ? ORANGE : BORDER_DEFAULT }} onClick={(e) => toggleLike(artwork.id, e)}>
+                {isLiked(artwork.id) ? '♥' : '♡'}
               </button>
             </div>
 
@@ -209,20 +241,42 @@ export default function OrsayPlayer({
             <Controls big isPlaying={isPlaying} hasAudio={hasAudio} onPlay={playPause} onPrev={onPrev} onNext={onNext} onNudge={nudge} />
 
             <div style={styles.bottomBtns}>
-              <button style={styles.bottomBtn} onClick={() => { setTab('map'); setSnap(1); }}>▥ 지도보기</button>
-              <button style={styles.bottomBtn} onClick={() => { setTab('list'); setSnap(2); }}>☰ 목차보기</button>
+              <button style={styles.bottomBtn} onClick={() => { setTab('map'); setSnap(1); setBrowseIndex(currentIndex); setPinActive(true); }}>▥ 지도보기</button>
+              <button style={styles.bottomBtn} onClick={() => { setTab('list'); setSnap(1); }}>☰ 목차보기</button>
+            </div>
+          </div>
+        ) : snap === 2 ? (
+          /* ── 90% 컴팩트 바: 썸네일 + 제목(마퀴) + 재생 + ⌄ ── */
+          <div style={styles.compactBar} onClick={() => setSnap(0)}>
+            <div style={styles.compactThumb}>
+              <ArtImage src={artwork.imageSrc} alt={artwork.title} cover />
+            </div>
+            <div style={styles.compactTitleWrap}>
+              <span style={styles.compactTitle}>{artwork.title}</span>
+            </div>
+            <div style={styles.compactControls} onClick={e => e.stopPropagation()}>
+              <button
+                style={{ ...styles.compactPlayBtn, ...(hasAudio ? {} : styles.playDisabled) }}
+                onClick={playPause}
+              >
+                {hasAudio ? (isPlaying ? '⏸' : '▶') : '🔇'}
+              </button>
+              <button style={styles.compactDownBtn} onClick={() => setSnap(0)}>⌄</button>
             </div>
           </div>
         ) : (
           /* ── 미니 플레이어: 작품 이미지 풀배경 + 트랙명/컨트롤 한 줄 ── */
-          <div style={styles.miniWrap}>
-            <ArtImage src={artwork.imageSrc} alt={artwork.title} cover />
+          <div style={styles.miniWrap} onClick={() => setSnap(0)}>
+            {artwork.imageSrc && (
+              <img src={artwork.imageSrc} alt="" aria-hidden style={styles.miniBlurBg} />
+            )}
+            <ArtImage src={artwork.imageSrc} alt={artwork.title} contain />
             <div style={styles.miniBar}>
               <div style={styles.miniBarInfo}>
                 <span style={styles.miniBarTitle}>{artwork.title}</span>
-                <span style={styles.miniBarSub}>{floorLabel(artwork)}</span>
+
               </div>
-              <div style={styles.miniBarControls}>
+              <div style={styles.miniBarControls} onClick={e => e.stopPropagation()}>
                 <button style={styles.miniBarBtn} onClick={onPrev}>⏮</button>
                 <button style={{ ...styles.miniBarPlay, ...(hasAudio ? {} : styles.playDisabled) }} onClick={playPause}>
                   {hasAudio ? (isPlaying ? '⏸' : '▶') : '🔇'}
@@ -249,86 +303,187 @@ export default function OrsayPlayer({
         {tab === 'map' ? (
           <div style={styles.sheetBody}>
             <div style={styles.mapBox}>
-              <FloorMapView artworks={artworks} currentIndex={currentIndex} roomStops={roomStops}
+              <FloorMapView artworks={artworks} currentIndex={browseIndex} playingIndex={currentIndex} roomStops={roomStops}
                             showRoute={showRoute}
-                            onPinClick={(i) => { onSelectIndex(i); setSnap(2); }}
-                            onMapClick={() => setSnap(1)} />
+                            pinActive={pinActive}
+                            onPinClick={(i) => { setBrowseIndex(i); setSnap(1); setPinActive(true); }}
+                            onMapClick={() => { setSnap(1); setPinActive(false); }} />
               <div style={styles.mapTopBar}>
-                <button style={styles.tocBtn} onClick={() => setTab('list')}>☰ 목차</button>
+                <button style={styles.tocBtn} onClick={() => { setTab('list'); setPinActive(false); }}>☰ 목차</button>
                 <button style={{ ...styles.mapTopBtn, ...(showRoute ? styles.mapTopBtnOn : {}) }}
                         onClick={() => setShowRoute(r => !r)}>
                   {showRoute ? '경로 끄기' : '경로 켜기'}
                 </button>
-                <button style={styles.mapTopBtn}>내 위치</button>
-                <button style={styles.mapTopBtn}>길찾기</button>
               </div>
             </div>
 
-            {snap === 2 && (
+            {snap >= 1 && pinActive && activeStop && (
               <div style={styles.stripOverlay}>
-                <div style={styles.stripHeader}>
-                  {activeStop ? `${activeStop.seq}번 · ${floorLabel(artwork)}` : '추가 작품'}
-                  <span style={styles.stripHeaderCount}>{stripIdxs.length}개 트랙</span>
-                </div>
+
                 <div style={styles.strip}>
-                  {stripIdxs.map((gi, k) => {
+                  {/* 이전 코스 카드 — strip 첫 번째 */}
+                  {prevStop && (
+                    <button
+                      style={{ ...styles.stripCard, ...styles.nextStopCard }}
+                      onClick={() => { autoPlayOnSelectRef.current = true; onSelectIndex(prevStop.idxs[0]); setSnap(1); }}
+                    >
+                      <div style={styles.nextStopThumb}>
+                        <div style={styles.prevStopCircle}>‹</div>
+                      </div>
+                      <div style={styles.nextStopLabel}>이전 장소</div>
+                      <div style={styles.nextStopName}>{roomName(prevStop.room)}</div>
+                    </button>
+                  )}
+                  {stripIdxs.map((gi) => {
                     const a = artworks[gi];
                     const active = gi === currentIndex;
                     return (
-                      <button key={a.id} style={styles.stripCard} onClick={() => onSelectIndex(gi)}>
-                        <div style={{ ...styles.stripThumb, ...(active ? styles.stripThumbOn : {}) }}>
+                      <div key={a.id} style={styles.stripCard}>
+                        <div style={{ ...styles.stripThumb, ...(active ? styles.stripThumbOn : {}) }}
+                             onClick={() => { autoPlayOnSelectRef.current = true; onSelectIndex(gi); setBrowseIndex(gi); setSnap(1); }}>
                           <ArtImage src={a.imageSrc} alt={a.title} cover />
-                          {active && (
-                            <div style={styles.nowPlay}>
-                              <span style={{ ...styles.eqBar, animationDelay: '0s', height: 8 }} />
-                              <span style={{ ...styles.eqBar, animationDelay: '0.15s', height: 14 }} />
-                              <span style={{ ...styles.eqBar, animationDelay: '0.3s', height: 10 }} />
-                              <span style={styles.nowPlayTxt}>재생중</span>
+                          {active && isPlaying && (
+                            <div style={styles.stripEqBadge}>
+                              <span style={{ ...styles.eqBar, animationDelay: '0s', height: 6 }} />
+                              <span style={{ ...styles.eqBar, animationDelay: '0.15s', height: 10 }} />
+                              <span style={{ ...styles.eqBar, animationDelay: '0.3s', height: 7 }} />
                             </div>
                           )}
+                          <button
+                            style={isLiked(a.id) ? styles.stripHeartOn : styles.stripHeart}
+                            onClick={(e) => { e.stopPropagation(); toggleLike(a.id, e); }}
+                          >
+                            {isLiked(a.id) ? '♥' : '♡'}
+                          </button>
                         </div>
-                        <div style={{ ...styles.stripName, ...(active ? styles.stripNameOn : {}) }}>{a.star ? '★ ' : ''}{a.title}</div>
-                      </button>
+                        <div style={{ ...styles.stripName, ...(active ? styles.stripNameOn : {}) }}
+                             onClick={() => { autoPlayOnSelectRef.current = true; onSelectIndex(gi); setBrowseIndex(gi); setSnap(1); }}>
+                          {a.star ? '★ ' : ''}{a.title}
+                        </div>
+                      </div>
                     );
                   })}
-                </div>
-                <div style={styles.navBar}>
-                  <button style={{ ...styles.navBtn, ...styles.navBtnPrimary, ...(nextStop ? {} : styles.navBtnDisabled) }}
-                          onClick={() => nextStop && onSelectIndex(nextStop.idxs[0])} disabled={!nextStop}>
-                    {nextStop ? `다음 장소 (${roomName(nextStop.room)}) →` : '마지막 장소입니다'}
-                  </button>
+                  {/* 다음 장소 카드 — strip 마지막 (다음 장소 있을 때만 노출) */}
+                  {nextStop && (
+                    <button
+                      style={{ ...styles.stripCard, ...styles.nextStopCard }}
+                      onClick={() => { autoPlayOnSelectRef.current = true; onSelectIndex(nextStop.idxs[0]); setSnap(1); }}
+                    >
+                      <div style={styles.nextStopThumb}>
+                        <div style={styles.nextStopCircle}>›</div>
+                      </div>
+                      <div style={styles.nextStopLabel}>다음 장소</div>
+                      <div style={styles.nextStopName}>{roomName(nextStop.room)}</div>
+                    </button>
+                  )}
                 </div>
               </div>
             )}
           </div>
         ) : (
           /* 목차 리스트 */
-          <div style={styles.listBody}>
-            <div style={styles.listTopBar}>
-              <button style={styles.tocBtnList} onClick={() => setTab('map')}>▥ 지도</button>
-              <button style={{ ...styles.listFilter, ...(listFilter === 'all' ? styles.listFilterOn : {}) }}
-                      onClick={() => setListFilter('all')}>전체</button>
-              <button style={{ ...styles.listFilter, ...(listFilter === 'best' ? styles.listFilterOn : {}) }}
-                      onClick={() => setListFilter('best')}>best</button>
-              <button style={{ ...styles.listFilter, ...(listFilter === 'liked' ? styles.listFilterOn : {}) }}
-                      onClick={() => setListFilter('liked')}>좋아요</button>
+          <div style={styles.listWrap}>
+            {/* 고정 헤더 영역 (스크롤 밖) */}
+            <div style={styles.listHeader}>
+              {/* 1행: 목차 + 콘텐츠 필터 + 검색 아이콘(absolute 우측) */}
+              <div style={{ ...styles.listTopBar, position: 'relative' }}>
+                <button style={styles.tocBtnList} onClick={() => { setTab('map'); setPinActive(false); }}>🗺 지도</button>
+                <button style={{ ...styles.listFilter, ...(listFilter === 'all' ? styles.listFilterOn : {}) }}
+                        onClick={() => setListFilter('all')}>전체</button>
+                <button style={{ ...styles.listFilter, ...(listFilter === 'best' ? styles.listFilterOn : {}) }}
+                        onClick={() => setListFilter('best')}>☆ BEST</button>
+                <button style={{ ...styles.listFilter, ...(listFilter === 'liked' ? styles.listFilterOn : {}) }}
+                        onClick={() => setListFilter('liked')}>♡ 좋아요</button>
+                {!searchOpen && (
+                  <button style={styles.searchIconAbsBtn} onClick={() => setSearchOpen(true)}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                      <circle cx="11" cy="11" r="7" stroke={TXT_DEFAULT} strokeWidth="2"/>
+                      <line x1="16.5" y1="16.5" x2="21" y2="21" stroke={TXT_DEFAULT} strokeWidth="2" strokeLinecap="round"/>
+                    </svg>
+                  </button>
+                )}
+              </div>
+              {/* 2행: 층 드랍다운(전체만) + 검색바 */}
+              {(searchOpen || listFilter === 'all') && (
+                <div style={styles.listSecondBar}>
+                  {searchOpen ? (
+                    <>
+                      <div style={styles.searchBar}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+                          <circle cx="11" cy="11" r="7" stroke={ORANGE} strokeWidth="2"/>
+                          <line x1="16.5" y1="16.5" x2="21" y2="21" stroke={ORANGE} strokeWidth="2" strokeLinecap="round"/>
+                        </svg>
+                        <input
+                          autoFocus
+                          style={styles.searchInput}
+                          placeholder="제목 검색하기"
+                          value={searchQuery}
+                          onChange={e => setSearchQuery(e.target.value)}
+                        />
+                      </div>
+                      <button style={styles.searchCancelBtn} onClick={() => { setSearchOpen(false); setSearchQuery(''); }}>취소</button>
+                    </>
+                  ) : (
+                    <button style={styles.floorSelector} onClick={() => setOverlay('floorFilter')}>
+                      <span style={styles.floorSelectorLabel}>
+                        {floorFilter !== null ? orsayFloorMaps[floorFilter].label : '층 전체'}
+                      </span>
+                      <span style={styles.floorSelectorChevron}>▼</span>
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
-            {artworks.map((a, i) => {
-              if (listFilter === 'best' && !a.star) return null;
-              if (listFilter === 'liked' && i !== currentIndex) return null;
-              return (
-                <button key={a.id}
-                        style={{ ...styles.listItem, ...(i === currentIndex ? styles.listItemOn : {}) }}
-                        onClick={() => onSelectIndex(i)}>
-                  <span style={{ ...styles.listNo, ...(i === currentIndex ? styles.listNoOn : {}) }}>{i + 1}</span>
-                  <div style={{ flex: 1, textAlign: 'left' }}>
-                    <div style={styles.listTitle}>{a.star ? '★ ' : ''}{a.title}</div>
-                    <div style={styles.listSub}>{floorLabel(a)}{a.subtitle ? ` · ${a.subtitle}` : ''}</div>
+            {/* 스크롤 목록 — 층별 그룹 */}
+            <div ref={listBodyRef} style={styles.listBody}>
+              {(() => {
+                const filtered = artworks.map((a, i) => ({ a, i })).filter(({ a }) => {
+                  if (listFilter === 'best' && !a.star) return false;
+                  if (listFilter === 'liked' && !isLiked(a.id)) return false;
+                  if (searchQuery && !a.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+                  return true;
+                });
+                const groups = [];
+                let lastFloor = null;
+                filtered.forEach(({ a, i }) => {
+                  if (a.floor !== lastFloor) {
+                    groups.push({ floor: a.floor, items: [] });
+                    lastFloor = a.floor;
+                  }
+                  groups[groups.length - 1].items.push({ a, i });
+                });
+                return groups.map(({ floor, items }) => (
+                  <div key={floor ?? 'none'} ref={el => { groupRefsMap.current[floor ?? 'none'] = el; }} style={{ marginBottom: 8 }}>
+                    <div style={styles.listGroupHeader}>{floor != null ? (orsayFloorMaps[floor]?.label ?? `${floor}층`) : '전체'}</div>
+                    <div style={styles.listGroupBox}>
+                    {items.map(({ a, i }) => (
+                      <button key={a.id}
+                              style={{ ...styles.listItem, ...(i === currentIndex ? styles.listItemOn : {}) }}
+                              onClick={() => { autoPlayOnSelectRef.current = true; onSelectIndex(i); setSnap(1); }}>
+                        <div style={{ ...styles.listThumb, ...(i === currentIndex ? styles.listThumbOn : {}) }}>
+                          <ArtImage src={a.imageSrc} alt={a.title} cover />
+                          {i === currentIndex && (
+                            <div style={styles.listThumbNowPlay}>
+                              <span style={{ ...styles.eqBar, animationDelay: '0s', height: 6 }} />
+                              <span style={{ ...styles.eqBar, animationDelay: '0.15s', height: 10 }} />
+                              <span style={{ ...styles.eqBar, animationDelay: '0.3s', height: 7 }} />
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ flex: 1, textAlign: 'left' }}>
+                          <div style={{ ...styles.listTitle, ...(i === currentIndex ? { color: ORANGE } : {}) }}>{a.star ? '★ ' : ''}{a.title}</div>
+                          <div style={styles.listSub}>{a.subtitle || ''}</div>
+                        </div>
+                        <button style={isLiked(a.id) ? styles.listHeartOn : styles.listHeartOff} onClick={(e) => toggleLike(a.id, e)}>
+                          {isLiked(a.id) ? '♥' : '♡'}
+                        </button>
+                      </button>
+                    ))}
+                    </div>
                   </div>
-                  <span style={styles.listDur}>{a.duration?.slice(3)}</span>
-                </button>
-              );
-            })}
+                ));
+              })()}
+            </div>
           </div>
         )}
       </div>
@@ -342,11 +497,36 @@ export default function OrsayPlayer({
             </div>
             <div style={styles.overlayHeader}>
               <span style={styles.overlayTitle}>
-                {overlay === 'comments' ? '댓글' : overlay === 'script' ? '스크립트' : '설정'}
+                {overlay === 'comments' ? '댓글' : overlay === 'script' ? '스크립트' : overlay === 'floorFilter' ? '목록' : '설정'}
               </span>
               <button style={styles.overlayClose} onClick={() => setOverlay(null)}>✕</button>
             </div>
             <div style={styles.overlayBody}>
+              {overlay === 'floorFilter' && (
+                <div>
+                  {[null, 1, 2, 5].map(f => (
+                    <button
+                      key={f ?? 'all'}
+                      style={{ ...styles.floorModalItem, ...(floorFilter === f ? styles.floorModalItemOn : {}) }}
+                      onClick={() => {
+                        setFloorFilter(f);
+                        setOverlay(null);
+                        requestAnimationFrame(() => {
+                          const key = f ?? 'none';
+                          const el = groupRefsMap.current[key];
+                          if (f === null) {
+                            listBodyRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                          } else if (el && listBodyRef.current) {
+                            const offset = el.offsetTop - listBodyRef.current.offsetTop;
+                            listBodyRef.current.scrollTo({ top: offset, behavior: 'smooth' });
+                          }
+                        });
+                      }}>
+                      {f === null ? '층 전체' : orsayFloorMaps[f]?.label ?? `${f}층`}
+                    </button>
+                  ))}
+                </div>
+              )}
               {overlay === 'comments' && (
                 <div style={styles.overlayEmpty}>
                   <span style={{ fontSize: 32 }}>💬</span>
@@ -371,15 +551,7 @@ export default function OrsayPlayer({
                   </div>
                   <div style={styles.settingsRow}>
                     <span style={styles.settingsLabel}>재생 속도</span>
-                  </div>
-                  <div style={styles.speedRow}>
-                    {[0.5, 0.75, 1, 1.25, 1.5, 2].map(s => (
-                      <button key={s}
-                        style={{ ...styles.speedBtn, ...(speed === s ? styles.speedBtnOn : {}) }}
-                        onClick={() => changeSpeed(s)}>
-                        {s === 1 ? '1.0x' : `${s}x`}
-                      </button>
-                    ))}
+                    <span style={styles.settingsValue}>x{speed === 1 ? '1.0' : speed}배 ›</span>
                   </div>
                 </div>
               )}
@@ -396,26 +568,26 @@ function roomName(room) {
 }
 
 function floorLabel(a) {
-  if (!a.floor) return '추가 작품';
+  if (!a.floor) return a.subtitle || '';
   const f = orsayFloorMaps[a.floor];
   const fl = f ? f.label : `${a.floor}층`;
   return a.room ? `${fl} · ${roomName(a.room)}` : fl;
 }
 
 // 작품 이미지 (없으면 플레이스홀더)
-function ArtImage({ src, alt, cover }) {
+function ArtImage({ src, alt, cover, contain }) {
   const [err, setErr] = useState(false);
   useEffect(() => { setErr(false); }, [src]);
   if (!src || err) {
     return (
-      <div style={{ ...styles.imgFallback, ...(cover ? { position: 'absolute', inset: 0 } : {}) }}>
+      <div style={{ ...styles.imgFallback, ...((cover || contain) ? { position: 'absolute', inset: 0 } : {}) }}>
         <span style={styles.imgFallbackIcon}>🖼️</span>
       </div>
     );
   }
   return (
     <img src={src} alt={alt}
-         style={cover ? styles.coverImg : styles.artImg}
+         style={contain ? styles.containImg : cover ? styles.coverImg : styles.artImg}
          onError={() => setErr(true)} />
   );
 }
@@ -436,8 +608,9 @@ function Controls({ big, isPlaying, hasAudio, onPlay, onPrev, onNext, onNudge })
 }
 
 // 층별 이미지 도면 + 순서 핀 + 경로선
-function FloorMapView({ artworks, currentIndex, roomStops, showRoute, onPinClick, onMapClick }) {
+function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, showRoute, pinActive, onPinClick, onMapClick }) {
   const current = artworks[currentIndex];
+  const playing = artworks[playingIndex];
   const [floor, setFloor] = useState(current.floor || 1);
   const [imgErr, setImgErr] = useState(false);
   const chipsRef = useRef(null);
@@ -539,13 +712,22 @@ function FloorMapView({ artworks, currentIndex, roomStops, showRoute, onPinClick
   // 전체 경로 (그레이 선)
   const allPts = densePts(floorStops);
 
-  // 활성 핀 → 다음 핀 구간 (오렌지 화살표)
+  // 활성 핀 → 다음 핀 구간 (오렌지 실선 + chevron)
   const segFrom = floorStops.find(s => s.seq === currentSeq);
   const segTo = floorStops.find(s => s.seq === currentSeq + 1);
   let seg = null;
   if (segFrom && segTo) {
     const a = pins[segFrom.room], b = pins[segTo.room];
-    seg = `${a.x},${a.y} ${(a.x + b.x) / 2},${(a.y + b.y) / 2} ${b.x},${b.y}`;
+    const dist = Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
+    // 마커 너비(5) + 간격(1.5) = 6.5 단위마다 1개
+    const spacing = 4.5;
+    const steps = Math.max(1, Math.round(dist / spacing));
+    const pts = [];
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      pts.push(`${a.x + (b.x - a.x) * t},${a.y + (b.y - a.y) * t}`);
+    }
+    seg = pts.join(' ');
   }
 
   // 현재 stop 칩을 가운데로 (지도는 한 화면에 다 보이므로 스크롤 불필요)
@@ -553,10 +735,10 @@ function FloorMapView({ artworks, currentIndex, roomStops, showRoute, onPinClick
     chipsRef.current?.querySelector('[data-active="1"]')?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
   }, [currentRoom]);
 
-  const pinStyle = (s) => {
-    if (s.seq === currentSeq) return styles.pinOn;       // 현재
-    if (s.seq < currentSeq) return styles.pinVisited;    // 지나감
-    return null;                                         // 앞으로
+  const pinStyle = (s, isActive) => {
+    if (s.seq === currentSeq && isActive && pinActive) return styles.pinOn;  // 현재 + 활성
+    if (s.seq < currentSeq) return styles.pinVisited;           // 지나감
+    return null;                                                 // 앞으로 or 비활성
   };
   const chipStyle = (s) => {
     if (s.seq === currentSeq) return styles.roomChipOn;
@@ -577,37 +759,61 @@ function FloorMapView({ artworks, currentIndex, roomStops, showRoute, onPinClick
             <img src={map.src} alt={map.label} style={styles.floorImg} onError={() => setImgErr(true)} />
             {floorStops.length > 1 && showRoute && (
               <svg style={styles.routeSvg} viewBox="0 0 100 100">
+                <defs>
+                  <marker id="arrowBlock" markerWidth="2" markerHeight="2" refX="1" refY="1"
+                          orient="auto" markerUnits="userSpaceOnUse">
+                    <rect x="0" y="0" width="2" height="2" rx="0.2" fill={ORANGE} />
+                    <path d="M0.5,0.3 L1.6,1 L0.5,1.7" fill="none" stroke="#fff" strokeWidth="0.5"
+                          strokeLinecap="round" strokeLinejoin="round" />
+                  </marker>
+                </defs>
                 {/* 전체 경로: 그레이 선 */}
                 {allPts && (
-                  <polyline points={allPts} fill="none" stroke={BORDER_DEFAULT} strokeWidth="0.9"
-                            strokeLinejoin="round" strokeLinecap="round" opacity="0.7" />
+                  <polyline points={allPts} fill="none" stroke="#FFBA94" strokeWidth="0.5"
+                            strokeLinejoin="round" strokeLinecap="round" strokeDasharray="1 1" opacity="0.6" />
                 )}
-                {/* 활성 → 다음: 오렌지 점선 애니메이션 */}
+                {/* 활성 → 다음: 주황 실선 + 블록 화살표 */}
                 {seg && (
-                  <polyline points={seg} fill="none" stroke={ORANGE} strokeWidth="1.4"
-                            strokeDasharray="2.4 2.4" strokeLinecap="round">
-                    <animate attributeName="stroke-dashoffset" values="9.6;0" dur="0.55s" repeatCount="indefinite" />
-                  </polyline>
+                  <polyline points={seg} fill="none" stroke={ORANGE} strokeWidth="2"
+                            strokeLinejoin="round" strokeLinecap="round"
+                            markerMid="url(#arrowBlock)" />
                 )}
               </svg>
             )}
             {/* 순서 핀: 지나감(회색) · 현재(주황) · 앞으로(파랑) */}
             {floorStops.map(s => {
               const pos = pins[s.room];
-              const active = s.seq === currentSeq;
+              const isCurrent = s.seq === currentSeq;
+              const isPlaying = s.room === playing?.room && s.floor === playing?.floor;
               return (
-                <div key={s.room} style={{ position: 'absolute', left: `${pos.x}%`, top: `${pos.y}%`, transform: 'translate(-50%,-50%)', zIndex: active ? 4 : 2, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  {active && (
+                <div key={s.room} style={{ position: 'absolute', left: `${pos.x}%`, top: `${pos.y}%`, transform: `translate(-50%,-50%) scale(${1 / zoom})`, transformOrigin: 'center center', zIndex: isCurrent ? 4 : isPlaying ? 3 : 2, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  {isCurrent && pinActive ? (
                     <div style={styles.pinTooltipWrap}>
                       <div style={styles.pinTooltip}>{roomName(s.room)}</div>
                       <div style={styles.pinTooltipArrow} />
                     </div>
+                  ) : s.seq === 1 && (
+                    <div style={styles.pinTooltipWrap}>
+                      <div style={styles.pinStartBubble}>Start</div>
+                      <div style={styles.pinTooltipArrow} />
+                    </div>
                   )}
-                  <button
-                    style={{ ...styles.pin, position: 'relative', left: 'auto', top: 'auto', transform: 'none', ...pinStyle(s) }}
-                    onClick={(e) => { e.stopPropagation(); onPinClick(s.idxs[0]); }}>
-                    {s.seq}
-                  </button>
+                  <div style={{ position: 'relative' }}>
+                    <button
+                      style={{ ...styles.pin, position: 'relative', left: 'auto', top: 'auto', transform: 'none', ...pinStyle(s, true), ...(isPlaying ? { background: ORANGE, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', gap: 2, paddingBottom: 3 } : {}) }}
+                      onClick={(e) => { e.stopPropagation(); onPinClick(s.idxs[0]); }}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onTouchStart={(e) => e.stopPropagation()}
+                      onTouchEnd={(e) => { e.stopPropagation(); e.preventDefault(); onPinClick(s.idxs[0]); }}>
+                      {isPlaying ? (
+                        <>
+                          <span style={{ ...styles.pinEqBar, height: 7, animationDelay: '0s' }} />
+                          <span style={{ ...styles.pinEqBar, height: 10, animationDelay: '0.2s' }} />
+                          <span style={{ ...styles.pinEqBar, height: 5, animationDelay: '0.1s' }} />
+                        </>
+                      ) : s.seq}
+                    </button>
+                  </div>
                 </div>
               );
             })}
@@ -674,6 +880,8 @@ const styles = {
     background: TXT_DEFAULT, boxShadow: '0 12px 40px rgba(0,0,0,0.6)' },
   artImg: { width: '100%', height: '100%', objectFit: 'cover' },
   coverImg: { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' },
+  containImg: { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' },
+  miniBlurBg: { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(28px)', transform: 'scale(1.2)', opacity: 0.5 },
   imgFallback: { width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
     background: 'linear-gradient(135deg,#2a2a32,#16161c)' },
   imgFallbackIcon: { fontSize: 40, opacity: 0.5 },
@@ -681,17 +889,18 @@ const styles = {
     fontSize: 40, color: 'rgba(255,255,255,0.85)', textShadow: '0 2px 12px rgba(0,0,0,0.6)', pointerEvents: 'none' },
   badge: { position: 'absolute', top: 8, left: 8, background: ORANGE, color: W, fontSize: 11, fontWeight: 600,
     padding: '3px 8px', borderRadius: 9999, letterSpacing: '0.04em' },
-  countRow: { textAlign: 'center', margin: '12px 0 4px' },
+  countRow: { textAlign: 'left', margin: '12px 0 4px' },
   count: { fontSize: 13, color: TXT_SUBTLE },
   titleRow: { display: 'flex', alignItems: 'flex-start', gap: 12, marginTop: 4 },
-  title: { fontSize: 20, fontWeight: 600, color: W, margin: 0, lineHeight: 1.45 },
-  subtitle: { fontSize: 13, color: TXT_SUBTLE, margin: '4px 0 0', lineHeight: 1.5 },
-  heart: { background: 'none', border: 'none', color: '#FA3E4D', fontSize: 24, cursor: 'pointer', lineHeight: 1, flexShrink: 0 },
+  title: { fontSize: 20, fontWeight: 600, color: W, margin: 0, lineHeight: 1.45, textAlign: 'left' },
+  subtitle: { fontSize: 13, color: TXT_SUBTLE, margin: '4px 0 0', lineHeight: 1.5, textAlign: 'left' },
+  heart: { background: 'none', border: 'none', fontSize: 24, cursor: 'pointer', lineHeight: 1, flexShrink: 0 },
   desc: { fontSize: 14, lineHeight: 1.55, color: TXT_SUBTLE, marginTop: 12 },
 
   chips: { display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' },
   chip: { fontSize: 13, color: W, background: 'rgba(255,255,255,0.15)', padding: '8px 12px',
-    borderRadius: 8, whiteSpace: 'nowrap', border: 'none', cursor: 'pointer' },
+    borderRadius: 8, whiteSpace: 'nowrap', border: 'none', cursor: 'pointer',
+    backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)' },
 
   progWrap: { marginTop: 16 },
   progBar: { position: 'relative', height: 4, background: 'rgba(255,255,255,0.15)', borderRadius: 9999, cursor: 'pointer' },
@@ -717,6 +926,22 @@ const styles = {
   bottomBtn: { flex: 1, padding: '14px', borderRadius: 12, background: 'rgba(255,255,255,0.15)',
     border: 'none', color: W, fontSize: 15, fontWeight: 600, cursor: 'pointer' },
 
+  // 90% 컴팩트 바
+  compactBar: { display: 'flex', alignItems: 'center', gap: 12, padding: '8px 16px',
+    background: PLAYER_BG, flex: 1, overflow: 'hidden' },
+  compactThumb: { position: 'relative', width: 52, height: 52, borderRadius: 8, overflow: 'hidden', flexShrink: 0,
+    background: '#222' },
+  compactTitleWrap: { flex: 1, overflow: 'hidden' },
+  compactTitle: { display: 'inline-block', fontSize: 16, fontWeight: 700, color: W,
+    whiteSpace: 'nowrap', animation: 'marquee 8s linear infinite', animationDelay: '2s' },
+  compactControls: { display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 },
+  compactPlayBtn: { width: 40, height: 40, borderRadius: '50%', background: 'rgba(255,255,255,0.15)',
+    color: W, fontSize: 16, border: 'none', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  compactDownBtn: { width: 40, height: 40, borderRadius: '50%', background: 'rgba(255,255,255,0.15)',
+    color: W, fontSize: 24, border: 'none', cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 },
+
   // 미니 플레이어
   miniWrap: { position: 'absolute', inset: 0, zIndex: 1, background: PLAYER_BG },
   miniBar: { position: 'absolute', left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center',
@@ -733,7 +958,7 @@ const styles = {
     fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none' },
 
   // 시트
-  sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, background: BG_PAGE, borderRadius: '16px 16px 0 0',
+  sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, background: BG_MUTED, borderRadius: '16px 16px 0 0',
     display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 -4px 12px rgba(0,0,0,0.3)' },
   handleZone: { display: 'flex', alignItems: 'center', justifyContent: 'center', height: 34, cursor: 'grab',
     touchAction: 'none', flexShrink: 0 },
@@ -741,26 +966,50 @@ const styles = {
   mapTopBar: { position: 'absolute', top: 10, left: 10, right: 10, zIndex: 5, display: 'flex', gap: 8,
     flexWrap: 'wrap' },
   tocBtn: { height: 34, padding: '0 12px', borderRadius: 9999,
-    background: TXT_DEFAULT, color: W, fontSize: 13, fontWeight: 700, border: 'none', cursor: 'pointer',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.28)', display: 'flex', alignItems: 'center' },
+    background: TXT_STRONG, color: W, fontSize: 13, fontWeight: 700, border: 'none', cursor: 'pointer',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.28)', display: 'flex', alignItems: 'center', outline: 'none' },
   mapTopBtn: { height: 34, padding: '0 12px', borderRadius: 9999, border: `1px solid ${BORDER_DEFAULT}`,
     background: BG_PAGE, color: TXT_STRONG, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center' },
-  mapTopBtnOn: { background: ORANGE, borderColor: ORANGE, color: W },
-  listTopBar: { position: 'sticky', top: 0, zIndex: 1, display: 'flex', alignItems: 'center', gap: 8,
-    padding: '4px 8px 8px', background: BG_PAGE },
+    boxShadow: '0 2px 8px rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', outline: 'none' },
+  mapTopBtnOn: { background: W, border: `1.5px solid ${ORANGE}`, color: ORANGE },
+  listWrap: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 },
+  listHeader: { flexShrink: 0, background: BG_MUTED },
+  listTopBar: { display: 'flex', alignItems: 'center', gap: 8,
+    padding: '10px 12px 6px', background: BG_MUTED },
+  listSecondBar: { display: 'flex', alignItems: 'center', gap: 8,
+    padding: '0 12px 8px', background: BG_MUTED },
+  floorSelector: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    height: 38, padding: '0 14px', borderRadius: 10, border: `1px solid ${BORDER_DEFAULT}`,
+    background: BG_PAGE, cursor: 'pointer' },
+  floorSelectorLabel: { fontSize: 14, fontWeight: 500, color: TXT_DEFAULT },
+  floorSelectorChevron: { fontSize: 11, color: TXT_SUBTLE },
+  searchBtn: { width: 38, height: 38, borderRadius: 10, border: `1px solid ${BORDER_DEFAULT}`,
+    background: BG_PAGE, display: 'flex', alignItems: 'center', justifyContent: 'center',
+    cursor: 'pointer', flexShrink: 0 },
+  searchIconAbsBtn: { position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+    width: 36, height: 36, border: 'none', background: 'none',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', outline: 'none' },
+  searchIconBtn: { width: 36, height: 36, border: 'none', background: 'none',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, outline: 'none' },
+  searchBar: { flex: 1, display: 'flex', alignItems: 'center', gap: 8, height: 38,
+    border: `1.5px solid ${ORANGE}`, borderRadius: 9999, padding: '0 14px', background: BG_PAGE },
+  searchInput: { flex: 1, border: 'none', outline: 'none', background: 'none',
+    fontSize: 14, color: TXT_STRONG, fontFamily: 'inherit' },
+  searchCancelBtn: { flexShrink: 0, border: 'none', background: 'none', fontSize: 14,
+    fontWeight: 500, color: TXT_DEFAULT, cursor: 'pointer', outline: 'none', padding: '0 4px' },
   tocBtnList: { height: 34, padding: '0 12px', borderRadius: 9999, background: TXT_STRONG, color: W, fontSize: 13, fontWeight: 700,
-    border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center' },
+    border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', outline: 'none' },
 
   sheetBody: { position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 },
-  mapBox: { position: 'relative', flex: 1, overflow: 'hidden', minHeight: 0, background: BG_MUTED },
+  mapBox: { position: 'relative', flex: 1, overflow: 'hidden', minHeight: 0, background: '#E3E3E3' },
   stripOverlay: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 5, padding: '0 16px 16px',
-    background: 'linear-gradient(transparent, rgba(255,255,255,0.95) 20%, #FFFFFF 30%)' },
+    background: 'linear-gradient(transparent, rgba(255,255,255,1) 80%, rgb(255,255,255) 100%)' },
+  pinActionBar: { display: 'flex', gap: 8, padding: '8px 0 4px' },
 
   // 층 도면
   floorWrap: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column' },
   // 스크롤 없이 한 화면에: 도면을 박스 안에 맞춰 표시(정사각 캔버스, 중앙 정렬)
-  floorImgBox: { position: 'relative', flex: 1, overflow: 'hidden', background: BG_SUBTLE, minHeight: 0,
+  floorImgBox: { position: 'relative', flex: 1, overflow: 'hidden', background: '#E3E3E3', minHeight: 0,
     display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'none', cursor: 'grab' },
 
   zoomReset: { position: 'absolute', right: 10, bottom: 66, zIndex: 6, padding: '8px 12px', borderRadius: 8,
@@ -773,8 +1022,8 @@ const styles = {
   floorPillItem: { padding: '10px 16px', border: 'none', background: 'transparent', color: TXT_SUBTLE,
     fontSize: 14, fontWeight: 700, cursor: 'pointer', textAlign: 'center', whiteSpace: 'nowrap' },
   floorPillItemOn: { color: ORANGE },
-  floorCanvas: { position: 'relative', height: '100%', aspectRatio: '1 / 1', maxWidth: '100%', lineHeight: 0 },
-  floorImg: { display: 'block', width: '100%', height: '100%', objectFit: 'contain' },
+  floorCanvas: { position: 'relative', width: '100%', lineHeight: 0 },
+  floorImg: { display: 'block', width: '100%', height: 'auto' },
   floorPlaceholder: { position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center',
     justifyContent: 'center', gap: 8, color: TXT_DISABLED },
   floorPhIcon: { fontSize: 40 },
@@ -783,16 +1032,23 @@ const styles = {
   routeSvg: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1, pointerEvents: 'none' },
   pinTooltipWrap: { position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
     marginBottom: 8, display: 'flex', flexDirection: 'column', alignItems: 'center', pointerEvents: 'none' },
-  pinTooltip: { whiteSpace: 'nowrap', background: TXT_DEFAULT, color: W, fontSize: 11, fontWeight: 600,
+  pinTooltip: { whiteSpace: 'nowrap', background: ORANGE, color: W, fontSize: 11, fontWeight: 600,
     padding: '8px 10px', borderRadius: 6, boxShadow: '0 2px 6px rgba(0,0,0,0.3)' },
+  pinStartBubble: { whiteSpace: 'nowrap', background: ORANGE, color: W, fontSize: 13, fontStyle: 'italic', fontWeight: 700,
+    padding: '6px 12px', borderRadius: 20, boxShadow: '0 2px 6px rgba(0,0,0,0.3)', letterSpacing: '0.5px' },
   pinTooltipArrow: { width: 0, height: 0, borderLeft: '5px solid transparent', borderRight: '5px solid transparent',
-    borderTop: `5px solid ${TXT_DEFAULT}` },
+    borderTop: `5px solid ${ORANGE}` },
   pin: { position: 'absolute', zIndex: 2, transform: 'translate(-50%,-50%)', width: 26, height: 26,
     borderRadius: '50%', background: 'rgba(255,115,13,0.6)', color: W, fontSize: 13, fontWeight: 700, border: `2px solid ${BG_PAGE}`,
     boxShadow: '0 2px 6px rgba(0,0,0,0.3)', cursor: 'pointer', display: 'flex', alignItems: 'center',
     justifyContent: 'center', lineHeight: 1 },
   pinOn: { background: ORANGE, transform: 'scale(1.3)', zIndex: 4 },
-  pinVisited: { background: BORDER_DEFAULT, border: `2px solid ${BG_MUTED}` },
+  pinVisited: { background: TXT_DISABLED, border: `2px solid ${BG_MUTED}` },
+  pinPlayingBadge: { position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
+    marginBottom: 3, display: 'flex', alignItems: 'flex-end', gap: 2, padding: '0 1px' },
+  pinEqBar: { width: 3, background: W, borderRadius: 2, display: 'inline-block',
+    transformOrigin: 'bottom', animation: 'eq 0.7s ease-in-out infinite', flexShrink: 0,
+    filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.4))' },
   foot: { position: 'absolute', zIndex: 3, transform: 'translate(-50%,-50%)', fontSize: 15, lineHeight: 1,
     filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.35))', pointerEvents: 'none' },
   crossFloor: { position: 'absolute', zIndex: 5, transform: 'translate(-50%,-180%)', whiteSpace: 'nowrap',
@@ -806,20 +1062,26 @@ const styles = {
   roomChipOn: { background: ORANGE, border: `1px solid ${ORANGE}`, color: '#fff' },
   roomChipVisited: { background: '#dfe1e8', border: '1px solid #dfe1e8', color: '#9298a6' },
 
-  stripHeader: { display: 'flex', alignItems: 'center', gap: 8, padding: '12px 4px 4px', fontSize: 14,
-    fontWeight: 700, color: TXT_STRONG, flexShrink: 0 },
-  stripHeaderCount: { fontSize: 12, fontWeight: 400, color: TXT_SUBTLE },
-  strip: { display: 'flex', gap: 10, overflowX: 'auto', padding: '8px 0 4px', flexShrink: 0 },
+  stripHeader: { display: 'flex', alignItems: 'center', gap: 6, padding: '10px 4px 6px', flexShrink: 0 },
+  stripPinIcon: { display: 'flex', alignItems: 'center', flexShrink: 0 },
+  stripRoomName: { fontSize: 15, fontWeight: 700, color: TXT_STRONG, flex: 1 },
+  stripHeaderCount: { fontSize: 13, fontWeight: 500, color: TXT_SUBTLE, flexShrink: 0 },
+  strip: { display: 'flex', gap: 10, overflowX: 'auto', padding: '4px 0 8px', flexShrink: 0 },
   stripCard: { flexShrink: 0, width: 92, background: 'none', border: 'none', padding: 0, cursor: 'pointer' },
-  stripThumb: { position: 'relative', width: 92, height: 72, borderRadius: 8, overflow: 'hidden', background: BG_MUTED,
+  stripThumb: { position: 'relative', width: 92, height: 92, borderRadius: 10, overflow: 'hidden', background: BG_MUTED,
     border: '2px solid transparent' },
-  stripThumbOn: { border: `3px solid ${ORANGE}`, boxShadow: `0 0 0 3px ${ORANGE_LIGHT}` },
+  stripThumbOn: { border: `3px solid ${ORANGE}`, boxShadow: `0 0 0 2px ${ORANGE_LIGHT}` },
   stripNo: { position: 'absolute', top: 4, left: 4, zIndex: 2, minWidth: 16, height: 16, padding: '0 4px',
     borderRadius: 8, background: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: 10, fontWeight: 700,
     display: 'flex', alignItems: 'center', justifyContent: 'center' },
   stripNoOn: { background: ORANGE },
-  nowPlay: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3,
-    background: 'rgba(0,0,0,0.42)' },
+  stripEqBadge: { position: 'absolute', top: 5, right: 5, display: 'flex', alignItems: 'flex-end', gap: 2, background: 'rgba(0,0,0,0.42)', borderRadius: 4, padding: '4px 5px' },
+  stripHeart: { position: 'absolute', bottom: 4, right: 4, background: 'none', border: 'none', color: 'rgba(255,255,255,0.8)', fontSize: 16, cursor: 'pointer', padding: 2, lineHeight: 1 },
+  stripHeartOn: { position: 'absolute', bottom: 4, right: 4, background: 'none', border: 'none', color: ORANGE, fontSize: 16, cursor: 'pointer', padding: 2, lineHeight: 1 },
+  nowPlay: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+    background: 'rgba(0,0,0,0.25)' },
+  nowPlayBtn: { width: 36, height: 36, borderRadius: '50%', background: ORANGE,
+    display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' },
   eqBar: { width: 3, background: '#fff', borderRadius: 2, transformOrigin: 'bottom',
     animation: 'eq 0.8s ease-in-out infinite' },
   nowPlayTxt: { position: 'absolute', bottom: 5, fontSize: 9, fontWeight: 700, color: '#fff', letterSpacing: 0.5 },
@@ -827,26 +1089,52 @@ const styles = {
     textAlign: 'left' },
   stripNameOn: { color: ORANGE, fontWeight: 700 },
 
-  navBar: { display: 'flex', gap: 10, marginTop: 10, flexShrink: 0 },
-  navBtn: { flex: 1, padding: '14px', borderRadius: 12, border: `1px solid ${BORDER_DEFAULT}`, background: BG_PAGE, color: TXT_STRONG,
-    fontSize: 15, fontWeight: 600, cursor: 'pointer' },
-  navBtnPrimary: { background: ORANGE, border: `1px solid ${ORANGE}`, color: W },
-  navBtnDisabled: { background: BORDER_DEFAULT, border: `1px solid ${BORDER_DEFAULT}`, color: TXT_DISABLED, cursor: 'default' },
+  nextStopCard: { border: 'none', borderRadius: 10, padding: '0 0 2px', display: 'flex',
+    flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', gap: 0 },
+  nextStopCardDisabled: {},
+  nextStopThumb: { width: 92, height: 72, display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  nextStopCircle: { width: 40, height: 40, borderRadius: '50%', background: ORANGE, color: W,
+    fontSize: 26, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center',
+    lineHeight: 1, paddingLeft: 3 },
+  nextStopCircleDisabled: { background: BORDER_DEFAULT },
+  prevStopCircle: { width: 40, height: 40, borderRadius: '50%', background: BORDER_DEFAULT, color: TXT_STRONG,
+    fontSize: 26, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center',
+    lineHeight: 1, paddingRight: 3 },
+  nextStopLabel: { fontSize: 11, color: TXT_SUBTLE, marginTop: 2 },
+  nextStopName: { fontSize: 13, fontWeight: 700, color: TXT_STRONG, marginTop: 1,
+    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 88 },
 
   listFilter: { height: 34, padding: '0 12px', borderRadius: 9999, border: `1px solid ${BORDER_DEFAULT}`,
     background: BG_PAGE, color: TXT_STRONG, fontSize: 13, fontWeight: 400, cursor: 'pointer',
-    display: 'flex', alignItems: 'center' },
-  listFilterOn: { background: ORANGE, borderColor: ORANGE, color: W, fontWeight: 700 },
-  listBody: { flex: 1, overflow: 'auto', padding: '8px 8px 16px' },
-  listItem: { display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '12px 12px', borderRadius: 12,
-    border: 'none', background: 'none', cursor: 'pointer' },
-  listItemOn: { background: ORANGE_LIGHT },
-  listNo: { width: 26, height: 26, borderRadius: '50%', background: BG_MUTED, color: TXT_SUBTLE, fontSize: 12, fontWeight: 700,
-    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  listNoOn: { background: ORANGE, color: W },
+    display: 'flex', alignItems: 'center', outline: 'none' },
+  listFilterOn: { background: W, border: `1.5px solid ${ORANGE}`, color: ORANGE, fontWeight: 700 },
+  listBody: { flex: 1, overflow: 'auto', padding: '4px 8px 16px' },
+  listGroupHeader: { fontSize: 14, fontWeight: 700, color: TXT_STRONG, padding: '16px 4px 8px', textAlign: 'left' },
+  listGroupBox: { background: W, borderRadius: 12, overflow: 'hidden' },
+  floorDrop: { margin: '0 8px 8px', borderRadius: 12, border: `1px solid ${BORDER_DEFAULT}`,
+    background: BG_PAGE, overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.10)' },
+  floorDropItem: { display: 'block', width: '100%', padding: '13px 16px', textAlign: 'left',
+    background: 'none', border: 'none', borderBottom: `1px solid ${BG_MUTED}`,
+    fontSize: 14, fontWeight: 500, color: TXT_DEFAULT, cursor: 'pointer' },
+  floorDropItemOn: { color: ORANGE, fontWeight: 700, background: ORANGE_LIGHT },
+  floorModalItem: { display: 'block', width: '100%', padding: '16px 20px', textAlign: 'left',
+    background: 'none', border: 'none', borderBottom: `1px solid ${BG_MUTED}`,
+    fontSize: 15, fontWeight: 500, color: TXT_DEFAULT, cursor: 'pointer', outline: 'none' },
+  floorModalItemOn: { color: ORANGE, fontWeight: 700, background: ORANGE_LIGHT },
+  listItem: { display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '12px 12px', borderRadius: 0,
+    border: 'none', borderBottom: '1px solid #EBEBEB', background: 'none', cursor: 'pointer' },
+  listItemOn: {},
+  listThumb: { position: 'relative', width: 92, height: 92, borderRadius: 10, overflow: 'hidden',
+    flexShrink: 0, background: BG_MUTED, border: '2px solid transparent' },
+  listThumbOn: { border: `2px solid ${ORANGE}` },
+  listThumbNowPlay: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center',
+    justifyContent: 'center', gap: 2, background: 'rgba(0,0,0,0.42)' },
   listTitle: { fontSize: 15, fontWeight: 600, color: TXT_STRONG },
   listSub: { fontSize: 13, color: TXT_SUBTLE, marginTop: 2 },
-  listDur: { fontSize: 13, color: TXT_DISABLED, flexShrink: 0 },
+  listHeartOff: { background: 'none', border: 'none', color: BORDER_DEFAULT, fontSize: 20,
+    cursor: 'pointer', flexShrink: 0, padding: '4px 8px', lineHeight: 1 },
+  listHeartOn: { background: 'none', border: 'none', color: ORANGE, fontSize: 20,
+    cursor: 'pointer', flexShrink: 0, padding: '4px 8px', lineHeight: 1 },
 
   dim: { position: 'absolute', inset: 0, zIndex: 50, background: 'rgba(0,0,0,0.50)' },
   overlaySheet: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '60%', zIndex: 51,
@@ -868,6 +1156,7 @@ const styles = {
   settingsBody: { display: 'flex', flexDirection: 'column', gap: 20, paddingBottom: 20 },
   settingsRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
   settingsLabel: { fontSize: 16, fontWeight: 600, color: TXT_STRONG },
+  settingsValue: { fontSize: 15, fontWeight: 400, color: TXT_SUBTLE },
   toggleTrack: { width: 44, height: 24, borderRadius: 9999, background: BORDER_DEFAULT, border: 'none',
     cursor: 'pointer', position: 'relative', padding: 0 },
   toggleTrackOn: { background: ORANGE },

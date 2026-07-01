@@ -34,3 +34,22 @@ button {
   0%, 100% { transform: scaleY(0.35); }
   50% { transform: scaleY(1); }
 }
+
+/* Google Maps InfoWindow 기본 말풍선 제거 */
+.gm-style .gm-style-iw-c {
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+}
+.gm-style .gm-style-iw-d {
+  overflow: hidden !important;
+}
+.gm-style .gm-style-iw-t::after,
+.gm-style .gm-style-iw-tc::after {
+  background: #FF730D !important;
+  box-shadow: none !important;
+}
+.gm-style .gm-ui-hover-effect {
+  display: none !important;
+}
