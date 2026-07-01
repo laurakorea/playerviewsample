@@ -490,6 +490,16 @@ const RAW = [
     '오르세 핵심투어를 마칩니다. 근처 맛집·카페는 댓글을 참고하세요. 감사합니다.', null],
 ];
 
+// 캐로젤 이미지가 필요한 트랙: code → [image URLs]
+const CAROUSEL_IMAGES = {
+  1: [
+    `${STATIC}/tour/2024/04/02/tour_track/14433/f80845aaf14b11eebb1762f5dad2ba95/image/1712101908_siia5.webp`,
+    `${STATIC}/tour/2024/04/02/tour_track/14434/1336af10f14c11eebbae36803c27effb/image/1712101953_3x4.png`,
+    `${STATIC}/tour/2024/04/04/tour_track/14564/8b368830f21611eebb8b3e2a2b44e56e/image/1712188913_n2i1a.png`,
+    `${STATIC}/tour/2024/04/04/tour_track/14435/44bed5f6f25711ee9ff72e2b80c9b4de/image/1712216712_DIgCh.png`,
+  ],
+};
+
 const artworks = RAW.map((r, i) => {
   const [code, group, title, subtitle, duration, mp3, image, description, floorOverride] = r;
   const map = ROOM_FLOOR[group] || { floor: null, room: null };
@@ -509,6 +519,7 @@ const artworks = RAW.map((r, i) => {
     duration,
     audioSrc: clean(mp3),
     imageSrc: clean(image),
+    carouselImages: CAROUSEL_IMAGES[code] ?? null,
     description,
   };
 });

@@ -3,7 +3,7 @@ import { orsayFloorMaps, orsayRoomPins } from '../data/orsayTourData';
 
 // 스냅별 시트 높이 (뷰포트 높이 대비 %)
 //  0: 지도 닫힘 → 풀 플레이어 / 1: 지도+스트립 / 2: 지도 크게(90%)
-const SHEET_VH = [0, 74, 90];
+const SHEET_VH = [0, 68, 90];
 
 export default function OrsayPlayer({
   artwork, artworks, currentIndex, total,
@@ -28,6 +28,8 @@ export default function OrsayPlayer({
   const [browseIndex, setBrowseIndex] = useState(currentIndex);
   // 재생 트랙이 외부(onPrev/onNext/onSelectIndex)에 의해 변경되면 탐색도 따라감
   useEffect(() => { setBrowseIndex(currentIndex); }, [currentIndex]);
+  // 지도보기 클릭 시 현재 핀으로 지도 센터 이동 트리거
+  const [mapCenterTrigger, setMapCenterTrigger] = useState(0);
   const isLiked = (id) => likedIds.has(id);
   const toggleLike = (id, e) => {
     e.stopPropagation();
@@ -200,13 +202,8 @@ export default function OrsayPlayer({
         {isFull ? (
           /* ── 풀 플레이어 ── */
           <div style={styles.fullWrap}>
-            <div style={styles.artBig} onClick={playPause}>
-              <ArtImage src={artwork.imageSrc} alt={artwork.title} />
-              {artwork.star && <span style={styles.badge}>핵심</span>}
-              {hasAudio && (
-                <div style={styles.playOverlay}>{isPlaying ? '' : '▶'}</div>
-              )}
-            </div>
+            <ArtCarousel artwork={artwork} hasAudio={hasAudio} isPlaying={isPlaying} />
+
             <div style={{ textAlign: 'left', margin: '12px 0 4px' }}>
               <span style={styles.count}>{floorLabel(artwork)}</span>
             </div>
@@ -241,7 +238,7 @@ export default function OrsayPlayer({
             <Controls big isPlaying={isPlaying} hasAudio={hasAudio} onPlay={playPause} onPrev={onPrev} onNext={onNext} onNudge={nudge} />
 
             <div style={styles.bottomBtns}>
-              <button style={styles.bottomBtn} onClick={() => { setTab('map'); setSnap(1); setBrowseIndex(currentIndex); setPinActive(true); }}>▥ 지도보기</button>
+              <button style={styles.bottomBtn} onClick={() => { setTab('map'); setSnap(1); setBrowseIndex(currentIndex); setPinActive(true); setMapCenterTrigger(n => n + 1); }}>▥ 지도보기</button>
               <button style={styles.bottomBtn} onClick={() => { setTab('list'); setSnap(1); }}>☰ 목차보기</button>
             </div>
           </div>
@@ -290,6 +287,18 @@ export default function OrsayPlayer({
 
       {/* ============ 지도 바텀시트 ============ */}
       <div style={{ ...styles.sheet, height: sheetH, transition: sheetTrans }}>
+        {/* 시트 우하단 고정 탭 토글 */}
+        <div style={{ ...styles.sheetTabToggleFixed, bottom: (pinActive && !!activeStop) ? 162 : 16, transition: 'bottom 0.3s cubic-bezier(0.4,0,0.2,1)' }}>
+          <button style={{ ...styles.sheetTabBtn, ...(tab === 'map' ? styles.sheetTabBtnOn : {}) }}
+                  onClick={() => { setTab('map'); setPinActive(false); }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ marginRight: 4, verticalAlign: 'middle' }}>
+                    <path d="M3 6L9 3L15 6L21 3V18L15 21L9 18L3 21V6Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/>
+                    <line x1="9" y1="3" x2="9" y2="18" stroke="currentColor" strokeWidth="2"/>
+                    <line x1="15" y1="6" x2="15" y2="21" stroke="currentColor" strokeWidth="2"/>
+                  </svg>지도</button>
+          <button style={{ ...styles.sheetTabBtn, ...(tab === 'list' ? styles.sheetTabBtnOn : {}) }}
+                  onClick={() => { setTab('list'); setPinActive(false); }}>☰ 목차</button>
+        </div>
         <div
           style={styles.handleZone}
           onPointerDown={onDown}
@@ -306,14 +315,12 @@ export default function OrsayPlayer({
               <FloorMapView artworks={artworks} currentIndex={browseIndex} playingIndex={currentIndex} roomStops={roomStops}
                             showRoute={showRoute}
                             pinActive={pinActive}
+                            centerTrigger={mapCenterTrigger}
                             onPinClick={(i) => { setBrowseIndex(i); setSnap(1); setPinActive(true); }}
-                            onMapClick={() => { setSnap(1); setPinActive(false); }} />
+                            onMapClick={() => { setSnap(1); setPinActive(false); }}
+                            stripActive={pinActive && !!activeStop}
+                            onToggleRoute={() => setShowRoute(r => !r)} />
               <div style={styles.mapTopBar}>
-                <button style={styles.tocBtn} onClick={() => { setTab('list'); setPinActive(false); }}>☰ 목차</button>
-                <button style={{ ...styles.mapTopBtn, ...(showRoute ? styles.mapTopBtnOn : {}) }}
-                        onClick={() => setShowRoute(r => !r)}>
-                  {showRoute ? '경로 끄기' : '경로 켜기'}
-                </button>
               </div>
             </div>
 
@@ -385,15 +392,16 @@ export default function OrsayPlayer({
           <div style={styles.listWrap}>
             {/* 고정 헤더 영역 (스크롤 밖) */}
             <div style={styles.listHeader}>
-              {/* 1행: 목차 + 콘텐츠 필터 + 검색 아이콘(absolute 우측) */}
-              <div style={{ ...styles.listTopBar, position: 'relative' }}>
-                <button style={styles.tocBtnList} onClick={() => { setTab('map'); setPinActive(false); }}>🗺 지도</button>
-                <button style={{ ...styles.listFilter, ...(listFilter === 'all' ? styles.listFilterOn : {}) }}
-                        onClick={() => setListFilter('all')}>전체</button>
-                <button style={{ ...styles.listFilter, ...(listFilter === 'best' ? styles.listFilterOn : {}) }}
-                        onClick={() => setListFilter('best')}>☆ BEST</button>
-                <button style={{ ...styles.listFilter, ...(listFilter === 'liked' ? styles.listFilterOn : {}) }}
-                        onClick={() => setListFilter('liked')}>♡ 좋아요</button>
+              {/* 1행: 스크롤 가능한 탭+필터 / 고정 검색 아이콘 */}
+              <div style={styles.listTopBarOuter}>
+                <div style={styles.listTopBar}>
+                  <button style={{ ...styles.listFilter, ...(listFilter === 'all' ? styles.listFilterOn : {}) }}
+                          onClick={() => setListFilter('all')}>전체</button>
+                  <button style={{ ...styles.listFilter, ...(listFilter === 'best' ? styles.listFilterOn : {}) }}
+                          onClick={() => setListFilter('best')}>☆ BEST</button>
+                  <button style={{ ...styles.listFilter, ...(listFilter === 'liked' ? styles.listFilterOn : {}) }}
+                          onClick={() => setListFilter('liked')}>♡ 좋아요</button>
+                </div>
                 {!searchOpen && (
                   <button style={styles.searchIconAbsBtn} onClick={() => setSearchOpen(true)}>
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
@@ -574,6 +582,68 @@ function floorLabel(a) {
   return a.room ? `${fl} · ${roomName(a.room)}` : fl;
 }
 
+// 캐로젤 (carouselImages 있을 때만, 없으면 단일 이미지)
+function ArtCarousel({ artwork, hasAudio, isPlaying }) {
+  const images = artwork.carouselImages?.length > 1 ? artwork.carouselImages : null;
+  const [idx, setIdx] = useState(0);
+  const touchRef = useRef(null);
+
+  useEffect(() => { setIdx(0); }, [artwork.id]);
+
+  const onTouchStart = (e) => { touchRef.current = e.touches[0].clientX; };
+  const onTouchEnd = (e) => {
+    if (touchRef.current == null) return;
+    const dx = e.changedTouches[0].clientX - touchRef.current;
+    touchRef.current = null;
+    if (Math.abs(dx) < 40) return;
+    if (!images) return;
+    setIdx(i => dx < 0 ? Math.min(i + 1, images.length - 1) : Math.max(i - 1, 0));
+  };
+
+  if (!images) {
+    return (
+      <div style={styles.artBig}>
+        <ArtImage src={artwork.imageSrc} alt={artwork.title} />
+        {artwork.star && <span style={styles.badge}>핵심</span>}
+      </div>
+    );
+  }
+
+  // peek 슬라이드: 각 아이템 75% 너비, 양 옆 인접 이미지가 보임
+  const ITEM_W = 80;   // % of wrapper
+  const GAP = 8;       // px between items
+  const OFFSET = 10;   // % from left to center first item
+
+  return (
+    <div style={{ width: '100%', overflow: 'hidden', margin: '6px 0 0', position: 'relative' }}
+         onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      <div style={{
+        display: 'flex',
+        gap: GAP,
+        transform: `translateX(calc(${OFFSET}% - ${idx} * (${ITEM_W}% + ${GAP}px)))`,
+        transition: 'transform 0.3s ease',
+      }}>
+        {images.map((src, i) => (
+          <div key={i} style={{
+            width: `${ITEM_W}%`,
+            aspectRatio: '1 / 1',
+            flexShrink: 0,
+            borderRadius: 8,
+            overflow: 'hidden',
+            background: '#2a2a2a',
+            opacity: i === idx ? 1 : 0.5,
+            transition: 'opacity 0.3s',
+            position: 'relative',
+          }} onClick={i !== idx ? () => setIdx(i) : undefined}>
+            <ArtImage src={src} alt={`${artwork.title} ${i + 1}`} />
+            {i === idx && artwork.star && <span style={styles.badge}>핵심</span>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // 작품 이미지 (없으면 플레이스홀더)
 function ArtImage({ src, alt, cover, contain }) {
   const [err, setErr] = useState(false);
@@ -608,7 +678,7 @@ function Controls({ big, isPlaying, hasAudio, onPlay, onPrev, onNext, onNudge })
 }
 
 // 층별 이미지 도면 + 순서 핀 + 경로선
-function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, showRoute, pinActive, onPinClick, onMapClick }) {
+function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, showRoute, pinActive, centerTrigger, stripActive, onPinClick, onMapClick, onToggleRoute }) {
   const current = artworks[currentIndex];
   const playing = artworks[playingIndex];
   const [floor, setFloor] = useState(current.floor || 1);
@@ -620,6 +690,8 @@ function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, showRou
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const panRef = useRef({ dragging: false, startX: 0, startY: 0, startPanX: 0, startPanY: 0 });
   const pinchRef = useRef({ pinching: false, startDist: 0, startZoom: 1 });
+  const imgBoxRef = useRef(null);
+  const canvasRef = useRef(null);
 
   // 층 바뀌면 줌 리셋
   useEffect(() => { setZoom(1); setPan({ x: 0, y: 0 }); }, [floor]);
@@ -679,6 +751,28 @@ function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, showRou
   };
 
   const resetZoom = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
+
+  // 지도보기 클릭 시 현재 핀 위치로 중앙 이동 + 확대
+  useEffect(() => {
+    if (!centerTrigger) return;
+    const box = imgBoxRef.current;
+    const canvas = canvasRef.current;
+    if (!box || !canvas) return;
+    const pos = pins[current.room];
+    if (!pos) return;
+    const targetZoom = 2.2;
+    const bw = box.clientWidth;
+    const bh = box.clientHeight;
+    const cw = canvas.offsetWidth;
+    const ch = canvas.offsetHeight;
+    const canvasLeft = (bw - cw) / 2;
+    const canvasTop = (bh - ch) / 2;
+    const pinX = canvasLeft + cw * pos.x / 100;
+    const pinY = canvasTop + ch * pos.y / 100;
+    // zoom 적용 후 핀이 중앙에 오도록 pan 계산
+    setPan({ x: (bw / 2 - pinX) * targetZoom, y: (bh / 2 - pinY) * targetZoom });
+    setZoom(targetZoom);
+  }, [centerTrigger]);
 
   // 현재 작품 층으로 자동 전환
   useEffect(() => { if (current.floor) setFloor(current.floor); }, [current.floor]);
@@ -748,14 +842,14 @@ function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, showRou
 
   return (
     <div style={styles.floorWrap}>
-      <div style={styles.floorImgBox}
+      <div ref={imgBoxRef} style={styles.floorImgBox}
            onPointerDown={onMapPointerDown} onPointerMove={onMapPointerMove}
            onPointerUp={onMapPointerUp} onPointerCancel={onMapPointerUp}
            onTouchStart={onMapTouchStart} onTouchMove={onMapTouchMove} onTouchEnd={onMapTouchEnd}
            onWheel={onMapWheel}
            onClick={onMapClick}>
         {map && !imgErr ? (
-          <div style={{ ...styles.floorCanvas, transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`, transition: pinchRef.current.pinching || panRef.current.dragging ? 'none' : 'transform 0.2s ease-out' }}>
+          <div ref={canvasRef} style={{ ...styles.floorCanvas, transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`, transition: pinchRef.current.pinching || panRef.current.dragging ? 'none' : 'transform 0.2s ease-out' }}>
             <img src={map.src} alt={map.label} style={styles.floorImg} onError={() => setImgErr(true)} />
             {floorStops.length > 1 && showRoute && (
               <svg style={styles.routeSvg} viewBox="0 0 100 100">
@@ -811,7 +905,7 @@ function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, showRou
                           <span style={{ ...styles.pinEqBar, height: 10, animationDelay: '0.2s' }} />
                           <span style={{ ...styles.pinEqBar, height: 5, animationDelay: '0.1s' }} />
                         </>
-                      ) : s.seq}
+                      ) : showRoute ? s.seq : null}
                     </button>
                   </div>
                 </div>
@@ -827,15 +921,22 @@ function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, showRou
         )}
       </div>
 
-      {/* 층 선택 pill */}
-      <div style={styles.floorPill}>
-        {floors.slice().reverse().map(f => (
-          <button key={f}
-                  style={{ ...styles.floorPillItem, ...(f === floor ? styles.floorPillItemOn : {}) }}
-                  onClick={() => setFloor(f)}>
-            {orsayFloorMaps[f].label}
-          </button>
-        ))}
+      {/* 좌측 하단 버튼 그룹: 경로 + 층 선택 */}
+      <div style={{ position: 'absolute', left: 10, zIndex: 6, bottom: stripActive ? 162 : 10, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8, transition: 'bottom 0.3s cubic-bezier(0.4,0,0.2,1)' }}>
+        <div style={styles.floorPill}>
+          {floors.slice().reverse().map(f => (
+            <button key={f}
+                    style={{ ...styles.floorPillItem, ...(f === floor ? styles.floorPillItemOn : {}) }}
+                    onClick={() => setFloor(f)}>
+              {orsayFloorMaps[f].label}
+            </button>
+          ))}
+        </div>
+        <button
+          style={{ ...styles.mapTopBtn, ...(showRoute ? styles.mapTopBtnOn : {}) }}
+          onClick={e => { e.stopPropagation(); onToggleRoute?.(); }}>
+          {showRoute ? '경로 끄기' : '경로 켜기'}
+        </button>
       </div>
 
     </div>
@@ -876,9 +977,9 @@ const styles = {
 
   // 풀 플레이어
   fullWrap: { flex: 1, display: 'flex', flexDirection: 'column', padding: '4px 20px 16px', overflow: 'auto' },
-  artBig: { position: 'relative', width: '72%', aspectRatio: '3 / 4', margin: '6px auto 0', borderRadius: 8, overflow: 'hidden',
-    background: TXT_DEFAULT, boxShadow: '0 12px 40px rgba(0,0,0,0.6)' },
-  artImg: { width: '100%', height: '100%', objectFit: 'cover' },
+  artBig: { position: 'relative', width: '80%', aspectRatio: '1 / 1', margin: '6px auto 0', borderRadius: 8, overflow: 'hidden',
+    background: '#2a2a2a', boxShadow: '0 12px 40px rgba(0,0,0,0.6)' },
+  artImg: { width: '100%', height: '100%', objectFit: 'contain' },
   coverImg: { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' },
   containImg: { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain' },
   miniBlurBg: { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', filter: 'blur(28px)', transform: 'scale(1.2)', opacity: 0.5 },
@@ -887,6 +988,9 @@ const styles = {
   imgFallbackIcon: { fontSize: 40, opacity: 0.5 },
   playOverlay: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
     fontSize: 40, color: 'rgba(255,255,255,0.85)', textShadow: '0 2px 12px rgba(0,0,0,0.6)', pointerEvents: 'none' },
+  carouselDots: { position: 'absolute', bottom: 8, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 5, pointerEvents: 'auto' },
+  carouselDot: { width: 6, height: 6, borderRadius: '50%', background: 'rgba(255,255,255,0.45)', cursor: 'pointer' },
+  carouselDotOn: { background: '#fff', transform: 'scale(1.3)' },
   badge: { position: 'absolute', top: 8, left: 8, background: ORANGE, color: W, fontSize: 11, fontWeight: 600,
     padding: '3px 8px', borderRadius: 9999, letterSpacing: '0.04em' },
   countRow: { textAlign: 'left', margin: '12px 0 4px' },
@@ -960,8 +1064,17 @@ const styles = {
   // 시트
   sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, background: BG_MUTED, borderRadius: '16px 16px 0 0',
     display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 -4px 12px rgba(0,0,0,0.3)' },
-  handleZone: { display: 'flex', alignItems: 'center', justifyContent: 'center', height: 34, cursor: 'grab',
+  handleZone: { display: 'flex', alignItems: 'center', justifyContent: 'center', height: 20, cursor: 'grab',
     touchAction: 'none', flexShrink: 0 },
+  sheetTabBar: { display: 'flex', alignItems: 'center', padding: '6px 14px 6px', flexShrink: 0 },
+  sheetTabToggle: { display: 'flex', background: BG_MUTED, borderRadius: 9999, padding: 3, gap: 2,
+    border: `1px solid ${BORDER_DEFAULT}` },
+  sheetTabToggleFixed: { position: 'absolute', right: 16, bottom: 16, zIndex: 20, display: 'flex',
+    background: BG_PAGE, borderRadius: 9999, padding: 3, gap: 2,
+    border: `1px solid ${BORDER_DEFAULT}`, boxShadow: '0 2px 8px rgba(0,0,0,0.15)' },
+  sheetTabBtn: { padding: '5px 12px', borderRadius: 9999, border: 'none', background: 'transparent',
+    fontSize: 13, fontWeight: 600, color: TXT_SUBTLE, cursor: 'pointer', whiteSpace: 'nowrap' },
+  sheetTabBtnOn: { background: '#1a1a1a', color: '#fff', boxShadow: '0 1px 6px rgba(0,0,0,0.2)' },
   grabber: { width: 52, height: 6, borderRadius: 9999, background: BORDER_DEFAULT },
   mapTopBar: { position: 'absolute', top: 10, left: 10, right: 10, zIndex: 5, display: 'flex', gap: 8,
     flexWrap: 'wrap' },
@@ -974,8 +1087,11 @@ const styles = {
   mapTopBtnOn: { background: W, border: `1.5px solid ${ORANGE}`, color: ORANGE },
   listWrap: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 },
   listHeader: { flexShrink: 0, background: BG_MUTED },
-  listTopBar: { display: 'flex', alignItems: 'center', gap: 8,
-    padding: '10px 12px 6px', background: BG_MUTED },
+  listTopBarOuter: { display: 'flex', alignItems: 'center', padding: '10px 12px 6px',
+    background: BG_MUTED, gap: 4 },
+  listTopBar: { display: 'flex', alignItems: 'center', gap: 8, flex: 1,
+    overflowX: 'auto', flexWrap: 'nowrap', WebkitOverflowScrolling: 'touch',
+    scrollbarWidth: 'none', msOverflowStyle: 'none' },
   listSecondBar: { display: 'flex', alignItems: 'center', gap: 8,
     padding: '0 12px 8px', background: BG_MUTED },
   floorSelector: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -986,8 +1102,7 @@ const styles = {
   searchBtn: { width: 38, height: 38, borderRadius: 10, border: `1px solid ${BORDER_DEFAULT}`,
     background: BG_PAGE, display: 'flex', alignItems: 'center', justifyContent: 'center',
     cursor: 'pointer', flexShrink: 0 },
-  searchIconAbsBtn: { position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
-    width: 36, height: 36, border: 'none', background: 'none',
+  searchIconAbsBtn: { flexShrink: 0, width: 36, height: 36, border: 'none', background: 'none',
     display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', outline: 'none' },
   searchIconBtn: { width: 36, height: 36, border: 'none', background: 'none',
     display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, outline: 'none' },
@@ -1017,7 +1132,7 @@ const styles = {
     cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.28)' },
 
   // 층 선택 pill
-  floorPill: { position: 'absolute', top: 50, left: 10, zIndex: 6, display: 'flex', flexDirection: 'column',
+  floorPill: { display: 'flex', flexDirection: 'column',
     background: BG_PAGE, borderRadius: 9999, boxShadow: '0 2px 8px rgba(0,0,0,0.2)', overflow: 'hidden' },
   floorPillItem: { padding: '10px 16px', border: 'none', background: 'transparent', color: TXT_SUBTLE,
     fontSize: 14, fontWeight: 700, cursor: 'pointer', textAlign: 'center', whiteSpace: 'nowrap' },
@@ -1066,7 +1181,7 @@ const styles = {
   stripPinIcon: { display: 'flex', alignItems: 'center', flexShrink: 0 },
   stripRoomName: { fontSize: 15, fontWeight: 700, color: TXT_STRONG, flex: 1 },
   stripHeaderCount: { fontSize: 13, fontWeight: 500, color: TXT_SUBTLE, flexShrink: 0 },
-  strip: { display: 'flex', gap: 10, overflowX: 'auto', padding: '4px 0 8px', flexShrink: 0 },
+  strip: { display: 'flex', gap: 2, overflowX: 'auto', padding: '4px 0 8px', flexShrink: 0 },
   stripCard: { flexShrink: 0, width: 92, background: 'none', border: 'none', padding: 0, cursor: 'pointer' },
   stripThumb: { position: 'relative', width: 92, height: 92, borderRadius: 10, overflow: 'hidden', background: BG_MUTED,
     border: '2px solid transparent' },
