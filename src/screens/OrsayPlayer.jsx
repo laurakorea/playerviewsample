@@ -28,6 +28,8 @@ export default function OrsayPlayer({
   const [browseIndex, setBrowseIndex] = useState(currentIndex);
   // 재생 트랙이 외부(onPrev/onNext/onSelectIndex)에 의해 변경되면 탐색도 따라감
   useEffect(() => { setBrowseIndex(currentIndex); }, [currentIndex]);
+  // 지도보기 클릭 시 현재 핀으로 지도 센터 이동 트리거
+  const [mapCenterTrigger, setMapCenterTrigger] = useState(0);
   const isLiked = (id) => likedIds.has(id);
   const toggleLike = (id, e) => {
     e.stopPropagation();
@@ -241,7 +243,7 @@ export default function OrsayPlayer({
             <Controls big isPlaying={isPlaying} hasAudio={hasAudio} onPlay={playPause} onPrev={onPrev} onNext={onNext} onNudge={nudge} />
 
             <div style={styles.bottomBtns}>
-              <button style={styles.bottomBtn} onClick={() => { setTab('map'); setSnap(1); setBrowseIndex(currentIndex); setPinActive(true); }}>▥ 지도보기</button>
+              <button style={styles.bottomBtn} onClick={() => { setTab('map'); setSnap(1); setBrowseIndex(currentIndex); setPinActive(true); setMapCenterTrigger(n => n + 1); }}>▥ 지도보기</button>
               <button style={styles.bottomBtn} onClick={() => { setTab('list'); setSnap(1); }}>☰ 목차보기</button>
             </div>
           </div>
@@ -306,6 +308,7 @@ export default function OrsayPlayer({
               <FloorMapView artworks={artworks} currentIndex={browseIndex} playingIndex={currentIndex} roomStops={roomStops}
                             showRoute={showRoute}
                             pinActive={pinActive}
+                            centerTrigger={mapCenterTrigger}
                             onPinClick={(i) => { setBrowseIndex(i); setSnap(1); setPinActive(true); }}
                             onMapClick={() => { setSnap(1); setPinActive(false); }} />
               <div style={styles.mapTopBar}>
@@ -608,7 +611,7 @@ function Controls({ big, isPlaying, hasAudio, onPlay, onPrev, onNext, onNudge })
 }
 
 // 층별 이미지 도면 + 순서 핀 + 경로선
-function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, showRoute, pinActive, onPinClick, onMapClick }) {
+function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, showRoute, pinActive, centerTrigger, onPinClick, onMapClick }) {
   const current = artworks[currentIndex];
   const playing = artworks[playingIndex];
   const [floor, setFloor] = useState(current.floor || 1);
@@ -620,6 +623,8 @@ function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, showRou
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const panRef = useRef({ dragging: false, startX: 0, startY: 0, startPanX: 0, startPanY: 0 });
   const pinchRef = useRef({ pinching: false, startDist: 0, startZoom: 1 });
+  const imgBoxRef = useRef(null);
+  const canvasRef = useRef(null);
 
   // 층 바뀌면 줌 리셋
   useEffect(() => { setZoom(1); setPan({ x: 0, y: 0 }); }, [floor]);
@@ -679,6 +684,26 @@ function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, showRou
   };
 
   const resetZoom = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
+
+  // 지도보기 클릭 시 현재 핀 위치로 중앙 이동
+  useEffect(() => {
+    if (!centerTrigger) return;
+    const box = imgBoxRef.current;
+    const canvas = canvasRef.current;
+    if (!box || !canvas) return;
+    const pos = pins[current.room];
+    if (!pos) return;
+    const bw = box.clientWidth;
+    const bh = box.clientHeight;
+    const cw = canvas.offsetWidth;
+    const ch = canvas.offsetHeight;
+    // 캔버스는 box 안에서 flex center — 캔버스 좌상단 위치
+    const canvasLeft = (bw - cw) / 2;
+    const canvasTop = (bh - ch) / 2;
+    const pinX = canvasLeft + cw * pos.x / 100;
+    const pinY = canvasTop + ch * pos.y / 100;
+    setPan({ x: bw / 2 - pinX, y: bh / 2 - pinY });
+  }, [centerTrigger]);
 
   // 현재 작품 층으로 자동 전환
   useEffect(() => { if (current.floor) setFloor(current.floor); }, [current.floor]);
@@ -748,14 +773,14 @@ function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, showRou
 
   return (
     <div style={styles.floorWrap}>
-      <div style={styles.floorImgBox}
+      <div ref={imgBoxRef} style={styles.floorImgBox}
            onPointerDown={onMapPointerDown} onPointerMove={onMapPointerMove}
            onPointerUp={onMapPointerUp} onPointerCancel={onMapPointerUp}
            onTouchStart={onMapTouchStart} onTouchMove={onMapTouchMove} onTouchEnd={onMapTouchEnd}
            onWheel={onMapWheel}
            onClick={onMapClick}>
         {map && !imgErr ? (
-          <div style={{ ...styles.floorCanvas, transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`, transition: pinchRef.current.pinching || panRef.current.dragging ? 'none' : 'transform 0.2s ease-out' }}>
+          <div ref={canvasRef} style={{ ...styles.floorCanvas, transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`, transition: pinchRef.current.pinching || panRef.current.dragging ? 'none' : 'transform 0.2s ease-out' }}>
             <img src={map.src} alt={map.label} style={styles.floorImg} onError={() => setImgErr(true)} />
             {floorStops.length > 1 && showRoute && (
               <svg style={styles.routeSvg} viewBox="0 0 100 100">

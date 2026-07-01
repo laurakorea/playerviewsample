@@ -33,6 +33,7 @@ export default function PlayerV2({
   const [viewingMyLocation, setViewingMyLocation] = useState(false);
   const myLocationFnRef = useRef(null);
   const goTourFnRef = useRef(null);
+  const centerPinFnRef = useRef(null);
   const [dragH, setDragH] = useState(null);
   const [tab, setTab] = useState('map');
   const [listFilter, setListFilter] = useState('all');
@@ -242,7 +243,7 @@ export default function PlayerV2({
             </div>
             <Controls big isPlaying={isPlaying} hasMedia={hasMedia} onPlay={playPause} onPrev={onPrev} onNext={onNext} onNudge={nudge} />
             <div style={styles.bottomBtns}>
-              <button style={styles.bottomBtn} onClick={() => { setTab('map'); setSnap(1); setBrowseIndex(currentIndex); setPinActive(true); }}>▥ 지도보기</button>
+              <button style={styles.bottomBtn} onClick={() => { setTab('map'); setSnap(1); setBrowseIndex(currentIndex); setPinActive(true); setTimeout(() => centerPinFnRef.current?.(), 80); }}>▥ 지도보기</button>
               <button style={styles.bottomBtn} onClick={() => { setTab('list'); setSnap(1); }}>☰ 목차보기</button>
             </div>
           </div>
@@ -312,6 +313,7 @@ export default function PlayerV2({
                 onMapClick={() => { setSnap(1); setPinActive(false); setViewingMyLocation(false); }}
                 onRegisterMyLocation={(fn) => { myLocationFnRef.current = fn; }}
                 onRegisterGoTour={(fn) => { goTourFnRef.current = fn; }}
+                onRegisterCenterPin={(fn) => { centerPinFnRef.current = fn; }}
               />
               <div style={styles.mapTopBar}>
                 <button style={styles.tocBtn} onClick={() => setTab('list')}>☰ 목차</button>
@@ -618,7 +620,7 @@ function playingMarkerIcon(g) {
   };
 }
 
-function MapView({ artworks, currentIndex, playingIndex, snap, showRoute, pinActive, onPinClick, onMapClick, onRegisterMyLocation, onRegisterGoTour }) {
+function MapView({ artworks, currentIndex, playingIndex, snap, showRoute, pinActive, onPinClick, onMapClick, onRegisterMyLocation, onRegisterGoTour, onRegisterCenterPin }) {
   const elRef = useRef(null);
   const mapRef = useRef(null);
   const markersRef = useRef([]);
@@ -666,6 +668,13 @@ function MapView({ artworks, currentIndex, playingIndex, snap, showRoute, pinAct
       const coord = s[currentIndexRef.current];
       if (coord) { map.panTo({ lat: coord.lat, lng: coord.lon }); map.setZoom(17); }
       if (userMarkerRef.current) { userMarkerRef.current.setMap(null); userMarkerRef.current = null; }
+    });
+    onRegisterCenterPin?.(() => {
+      const map = mapRef.current;
+      const s = seqRef.current;
+      if (!map || !s) return;
+      const coord = s[currentIndexRef.current];
+      if (coord) { map.panTo({ lat: coord.lat, lng: coord.lon }); }
     });
   }, []);
 
