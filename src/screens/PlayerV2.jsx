@@ -207,12 +207,27 @@ export default function PlayerV2({
       {/* ============ 플레이어 레이어 ============ */}
       <div style={{ ...styles.player, bottom: sheetH, transition: `bottom ${sheetTrans.includes('none') ? '0s' : '0.32s cubic-bezier(0.4,0,0.2,1)'}` }}>
         <div style={styles.topBar}>
-          {snap !== 2 && <button style={styles.iconBtn} onClick={onHome}>⌄</button>}
+          {snap !== 2 && (
+            <button style={styles.iconBtn} onClick={onHome} aria-label="닫기">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M1 6.5L9.5 15L18 6.5" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          )}
           <div style={styles.topRight}>
             {!isFull && snap !== 2 && (
               <>
-                <button style={styles.chip} onClick={() => setOverlay('comments')}>댓글</button>
-                <button style={styles.chip} onClick={() => setOverlay('script')}>스크립트</button>
+                <button style={styles.chipIcon} onClick={() => setOverlay('comments')} aria-label="댓글">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M4 4H20V16H7L4 19V4Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+                <button style={styles.chipIcon} onClick={() => setOverlay('script')} aria-label="스크립트">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M6 3H14L18 7V21H6V3Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
+                    <path d="M9 11H15M9 15H15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                  </svg>
+                </button>
               </>
             )}
             {snap !== 2 && (
@@ -942,7 +957,7 @@ const styles = {
 
   player: { position: 'absolute', top: 0, left: 0, right: 0, display: 'flex', flexDirection: 'column', background: PLAYER_BG, overflow: 'hidden' },
   topBar: { position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', background: 'linear-gradient(rgba(0,0,0,0.45), transparent)' },
-  iconBtn: { background: 'none', border: 'none', color: W, fontSize: 24, lineHeight: 1, cursor: 'pointer', width: 32 },
+  iconBtn: { background: 'none', border: 'none', color: W, fontSize: 24, lineHeight: 1, cursor: 'pointer', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 },
   topRight: { display: 'flex', alignItems: 'center', gap: 8 },
   gearBtn: { background: 'none', border: 'none', color: W, fontSize: 18, width: 36, height: 36, borderRadius: 9999, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
 
@@ -965,6 +980,7 @@ const styles = {
 
   chips: { display: 'flex', gap: 8, marginTop: 16, flexWrap: 'wrap' },
   chip: { fontSize: 13, color: W, background: 'rgba(255,255,255,0.15)', padding: '8px 12px', borderRadius: 8, whiteSpace: 'nowrap', border: 'none', cursor: 'pointer', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)' },
+  chipIcon: { color: W, background: 'none', border: 'none', width: 36, height: 36, borderRadius: 9999, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
 
   progWrap: { marginTop: 16 },
   progBar: { position: 'relative', height: 4, background: 'rgba(255,255,255,0.15)', borderRadius: 9999, cursor: 'pointer' },
@@ -1010,8 +1026,8 @@ const styles = {
     border: `1px solid ${BORDER_DEFAULT}`, boxShadow: '0 2px 8px rgba(0,0,0,0.15)' },
   sheetTabToggle: { display: 'flex', background: BG_MUTED, borderRadius: 9999, padding: 3, gap: 2,
     border: `1px solid ${BORDER_DEFAULT}` },
-  sheetTabBtn: { padding: '5px 12px', borderRadius: 9999, border: 'none', background: 'transparent',
-    fontSize: 13, fontWeight: 600, color: TXT_SUBTLE, cursor: 'pointer' },
+  sheetTabBtn: { height: 34, padding: '0 12px', borderRadius: 9999, border: 'none', background: 'transparent',
+    fontSize: 13, fontWeight: 600, color: TXT_SUBTLE, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   sheetTabBtnOn: { background: '#1a1a1a', color: '#fff', boxShadow: '0 1px 6px rgba(0,0,0,0.2)' },
   grabber: { width: 52, height: 6, borderRadius: 9999, background: BORDER_DEFAULT },
 

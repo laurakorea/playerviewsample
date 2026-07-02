@@ -46,6 +46,26 @@ export default function OrsayPlayer({
 
   const [overlay, setOverlay] = useState(null); // 'comments' | 'script' | 'settings' | null
 
+  // 미니 플레이어(snap 1)에서도 캐로젤 스와이프 지원
+  const [miniIdx, setMiniIdx] = useState(0);
+  const miniImages = artwork.carouselImages?.length > 1 ? artwork.carouselImages : null;
+  useEffect(() => { setMiniIdx(0); }, [artwork.id]);
+  const miniTouchRef = useRef(null);
+  const miniSwipedRef = useRef(false);
+  const onMiniTouchStart = (e) => { miniTouchRef.current = e.touches[0].clientX; };
+  const onMiniTouchEnd = (e) => {
+    if (miniTouchRef.current == null || !miniImages) return;
+    const dx = e.changedTouches[0].clientX - miniTouchRef.current;
+    miniTouchRef.current = null;
+    if (Math.abs(dx) < 40) return;
+    miniSwipedRef.current = true;
+    setMiniIdx(i => dx < 0 ? Math.min(i + 1, miniImages.length - 1) : Math.max(i - 1, 0));
+  };
+  const onMiniWrapClick = () => {
+    if (miniSwipedRef.current) { miniSwipedRef.current = false; return; }
+    setSnap(0);
+  };
+
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [elapsed, setElapsed] = useState(0);
@@ -189,12 +209,27 @@ export default function OrsayPlayer({
       <div style={{ ...styles.player, bottom: sheetH, transition: `bottom ${sheetTrans.includes('none') ? '0s' : '0.32s cubic-bezier(0.4,0,0.2,1)'}` }}>
         {/* 상단 바 */}
         <div style={styles.topBar}>
-          {snap !== 2 && <button style={styles.iconBtn} onClick={onHome}>⌄</button>}
+          {snap !== 2 && (
+            <button style={styles.iconBtn} onClick={onHome} aria-label="닫기">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M1 6.5L9.5 15L18 6.5" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/>
+              </svg>
+            </button>
+          )}
           <div style={styles.topRight}>
             {!isFull && snap !== 2 && (
               <>
-                <button style={styles.chip} onClick={() => setOverlay('comments')}>댓글</button>
-                <button style={styles.chip} onClick={() => setOverlay('script')}>스크립트</button>
+                <button style={styles.chipIcon} onClick={() => setOverlay('comments')} aria-label="댓글">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M4 4H20V16H7L4 19V4Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
+                  </svg>
+                </button>
+                <button style={styles.chipIcon} onClick={() => setOverlay('script')} aria-label="스크립트">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M6 3H14L18 7V21H6V3Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/>
+                    <path d="M9 11H15M9 15H15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                  </svg>
+                </button>
               </>
             )}
             {snap !== 2 && (
@@ -271,11 +306,30 @@ export default function OrsayPlayer({
           </div>
         ) : (
           /* ── 미니 플레이어: 작품 이미지 풀배경 + 트랙명/컨트롤 한 줄 ── */
-          <div style={styles.miniWrap} onClick={() => setSnap(0)}>
-            {artwork.imageSrc && (
-              <img src={artwork.imageSrc} alt="" aria-hidden style={styles.miniBlurBg} />
+          <div style={styles.miniWrap} onClick={onMiniWrapClick}
+               onTouchStart={onMiniTouchStart} onTouchEnd={onMiniTouchEnd}>
+            {miniImages ? (
+              <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
+                <div style={{
+                  position: 'absolute', inset: 0, display: 'flex', gap: 8,
+                  transform: `translateX(calc(10% - ${miniIdx} * (80% + 8px)))`,
+                  transition: 'transform 0.3s ease',
+                }}>
+                  {miniImages.map((src, i) => (
+                    <div key={i} style={{ width: '80%', height: '100%', flexShrink: 0, position: 'relative', background: '#2a2a2a', opacity: i === miniIdx ? 1 : 0.5, transition: 'opacity 0.3s' }}>
+                      <ArtImage src={src} alt={artwork.title} contain />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <>
+                {artwork.imageSrc && (
+                  <img src={artwork.imageSrc} alt="" aria-hidden style={styles.miniBlurBg} />
+                )}
+                <ArtImage src={artwork.imageSrc} alt={artwork.title} contain />
+              </>
             )}
-            <ArtImage src={artwork.imageSrc} alt={artwork.title} contain />
             <div style={styles.miniBar}>
               <div style={styles.miniBarInfo}>
                 <span style={styles.miniBarTitle}>{artwork.title}</span>
@@ -403,6 +457,13 @@ export default function OrsayPlayer({
               {/* 1행: 스크롤 가능한 탭+필터 / 고정 검색 아이콘 */}
               <div style={styles.listTopBarOuter}>
                 <div style={styles.listTopBar}>
+                  {listFilter === 'all' && (
+                    <button style={styles.floorHamburgerBtn} onClick={() => setOverlay('floorFilter')} aria-label="층 선택">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M4 6H20M4 12H20M4 18H20" stroke={TXT_DEFAULT} strokeWidth="2" strokeLinecap="round"/>
+                      </svg>
+                    </button>
+                  )}
                   <button style={{ ...styles.listFilter, ...(listFilter === 'all' ? styles.listFilterOn : {}) }}
                           onClick={() => setListFilter('all')}>전체</button>
                   <button style={{ ...styles.listFilter, ...(listFilter === 'best' ? styles.listFilterOn : {}) }}
@@ -419,34 +480,23 @@ export default function OrsayPlayer({
                   </button>
                 )}
               </div>
-              {/* 2행: 층 드랍다운(전체만) + 검색바 */}
-              {(searchOpen || listFilter === 'all') && (
+              {/* 2행: 검색바 */}
+              {searchOpen && (
                 <div style={styles.listSecondBar}>
-                  {searchOpen ? (
-                    <>
-                      <div style={styles.searchBar}>
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
-                          <circle cx="11" cy="11" r="7" stroke={ORANGE} strokeWidth="2"/>
-                          <line x1="16.5" y1="16.5" x2="21" y2="21" stroke={ORANGE} strokeWidth="2" strokeLinecap="round"/>
-                        </svg>
-                        <input
-                          autoFocus
-                          style={styles.searchInput}
-                          placeholder="제목 검색하기"
-                          value={searchQuery}
-                          onChange={e => setSearchQuery(e.target.value)}
-                        />
-                      </div>
-                      <button style={styles.searchCancelBtn} onClick={() => { setSearchOpen(false); setSearchQuery(''); }}>취소</button>
-                    </>
-                  ) : (
-                    <button style={styles.floorSelector} onClick={() => setOverlay('floorFilter')}>
-                      <span style={styles.floorSelectorLabel}>
-                        {floorFilter !== null ? orsayFloorMaps[floorFilter].label : '층 전체'}
-                      </span>
-                      <span style={styles.floorSelectorChevron}>▼</span>
-                    </button>
-                  )}
+                  <div style={styles.searchBar}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
+                      <circle cx="11" cy="11" r="7" stroke={ORANGE} strokeWidth="2"/>
+                      <line x1="16.5" y1="16.5" x2="21" y2="21" stroke={ORANGE} strokeWidth="2" strokeLinecap="round"/>
+                    </svg>
+                    <input
+                      autoFocus
+                      style={styles.searchInput}
+                      placeholder="제목 검색하기"
+                      value={searchQuery}
+                      onChange={e => setSearchQuery(e.target.value)}
+                    />
+                  </div>
+                  <button style={styles.searchCancelBtn} onClick={() => { setSearchOpen(false); setSearchQuery(''); }}>취소</button>
                 </div>
               )}
             </div>
@@ -977,7 +1027,7 @@ const styles = {
     background: PLAYER_BG, overflow: 'hidden' },
   topBar: { position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     padding: '10px 16px', background: 'linear-gradient(rgba(0,0,0,0.45), transparent)' },
-  iconBtn: { background: 'none', border: 'none', color: W, fontSize: 24, lineHeight: 1, cursor: 'pointer', width: 32 },
+  iconBtn: { background: 'none', border: 'none', color: W, fontSize: 24, lineHeight: 1, cursor: 'pointer', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 },
   topRight: { display: 'flex', alignItems: 'center', gap: 8 },
   topChip: { display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(255,255,255,0.15)',
     border: 'none', color: W, fontSize: 12, padding: '5px 10px', borderRadius: 9999,
@@ -1016,6 +1066,8 @@ const styles = {
   chip: { fontSize: 13, color: W, background: 'rgba(255,255,255,0.15)', padding: '8px 12px',
     borderRadius: 8, whiteSpace: 'nowrap', border: 'none', cursor: 'pointer',
     backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)' },
+  chipIcon: { color: W, background: 'none', border: 'none', width: 36, height: 36,
+    borderRadius: 9999, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
 
   progWrap: { marginTop: 16 },
   progBar: { position: 'relative', height: 4, background: 'rgba(255,255,255,0.15)', borderRadius: 9999, cursor: 'pointer' },
@@ -1083,8 +1135,8 @@ const styles = {
   sheetTabToggleFixed: { position: 'absolute', right: 16, bottom: 16, zIndex: 20, display: 'flex',
     background: BG_PAGE, borderRadius: 9999, padding: 3, gap: 2,
     border: `1px solid ${BORDER_DEFAULT}`, boxShadow: '0 2px 8px rgba(0,0,0,0.15)' },
-  sheetTabBtn: { padding: '5px 12px', borderRadius: 9999, border: 'none', background: 'transparent',
-    fontSize: 13, fontWeight: 600, color: TXT_SUBTLE, cursor: 'pointer', whiteSpace: 'nowrap' },
+  sheetTabBtn: { height: 34, padding: '0 12px', borderRadius: 9999, border: 'none', background: 'transparent',
+    fontSize: 13, fontWeight: 600, color: TXT_SUBTLE, cursor: 'pointer', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   sheetTabBtnOn: { background: '#1a1a1a', color: '#fff', boxShadow: '0 1px 6px rgba(0,0,0,0.2)' },
   grabber: { width: 52, height: 6, borderRadius: 9999, background: BORDER_DEFAULT },
   mapTopBar: { position: 'absolute', top: 10, left: 10, right: 10, zIndex: 5, display: 'flex', gap: 8,
@@ -1108,11 +1160,9 @@ const styles = {
     scrollbarWidth: 'none', msOverflowStyle: 'none' },
   listSecondBar: { display: 'flex', alignItems: 'center', gap: 8,
     padding: '0 12px 8px', background: BG_MUTED },
-  floorSelector: { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    height: 38, padding: '0 14px', borderRadius: 10, border: `1px solid ${BORDER_DEFAULT}`,
-    background: BG_PAGE, cursor: 'pointer' },
-  floorSelectorLabel: { fontSize: 14, fontWeight: 500, color: TXT_DEFAULT },
-  floorSelectorChevron: { fontSize: 11, color: TXT_SUBTLE },
+  floorHamburgerBtn: { flexShrink: 0, width: 34, height: 34, borderRadius: 9999,
+    border: `1px solid ${BORDER_DEFAULT}`, background: BG_PAGE, cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', outline: 'none' },
   searchBtn: { width: 38, height: 38, borderRadius: 10, border: `1px solid ${BORDER_DEFAULT}`,
     background: BG_PAGE, display: 'flex', alignItems: 'center', justifyContent: 'center',
     cursor: 'pointer', flexShrink: 0 },
