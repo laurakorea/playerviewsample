@@ -436,7 +436,7 @@ export default function PlayerV2({
                 </div>
                 <div style={styles.strip}>
                   {prevArtwork && (
-                    <button style={{ ...styles.stripCard, ...styles.nextStopCard }} onClick={() => { autoPlayOnSelectRef.current = true; onSelectIndex(browseIndex - 1); setBrowseIndex(browseIndex - 1); setSnap(1); }}>
+                    <button style={{ ...styles.stripCard, ...styles.nextStopCard }} onClick={() => { setBrowseIndex(browseIndex - 1); setPinActive(true); setSnap(1); setTimeout(() => centerPinFnRef.current?.(), 80); }}>
                       <div style={styles.nextStopThumb}>
                         <div style={styles.prevStopCircle}>‹</div>
                       </div>
@@ -475,7 +475,7 @@ export default function PlayerV2({
                     })()}
                   </div>
                   {nextArtwork && (
-                    <button style={{ ...styles.stripCard, ...styles.nextStopCard }} onClick={() => { autoPlayOnSelectRef.current = true; onSelectIndex(browseIndex + 1); setBrowseIndex(browseIndex + 1); setSnap(1); }}>
+                    <button style={{ ...styles.stripCard, ...styles.nextStopCard }} onClick={() => { setBrowseIndex(browseIndex + 1); setPinActive(true); setSnap(1); setTimeout(() => centerPinFnRef.current?.(), 80); }}>
                       <div style={styles.nextStopThumb}>
                         <div style={styles.nextStopCircle}>›</div>
                       </div>

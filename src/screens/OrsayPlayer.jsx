@@ -394,7 +394,7 @@ export default function OrsayPlayer({
                   {prevStop && (
                     <button
                       style={{ ...styles.stripCard, ...styles.nextStopCard }}
-                      onClick={() => { autoPlayOnSelectRef.current = true; onSelectIndex(prevStop.idxs[0]); setSnap(1); }}
+                      onClick={() => { setBrowseIndex(prevStop.idxs[0]); setPinActive(true); setSnap(1); setMapCenterTrigger(n => n + 1); }}
                     >
                       <div style={styles.nextStopThumb}>
                         <div style={styles.prevStopCircle}>‹</div>
@@ -436,7 +436,7 @@ export default function OrsayPlayer({
                   {nextStop && (
                     <button
                       style={{ ...styles.stripCard, ...styles.nextStopCard }}
-                      onClick={() => { autoPlayOnSelectRef.current = true; onSelectIndex(nextStop.idxs[0]); setSnap(1); }}
+                      onClick={() => { setBrowseIndex(nextStop.idxs[0]); setPinActive(true); setSnap(1); setMapCenterTrigger(n => n + 1); }}
                     >
                       <div style={styles.nextStopThumb}>
                         <div style={styles.nextStopCircle}>›</div>
