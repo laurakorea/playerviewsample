@@ -61,21 +61,6 @@ export default function StartScreen({ onStart, onStart2, onStartOrsay, onStartOr
       </button>
       <p style={styles.hint}>이어폰을 연결하면 더 좋아요 🎧</p>
 
-      <div style={styles.routePreview}>
-        <div style={styles.routeLabel}>투어 경로</div>
-        <div style={styles.routeItems}>
-          {artworks.map((a, i) => (
-            <div key={a.id} style={styles.routeItem}>
-              <div style={styles.routeDot}>{i + 1}</div>
-              <div style={styles.routeInfo}>
-                <span style={styles.routeName}>{a.title}</span>
-                <span style={styles.routeSub}>{a.duration}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
       <button style={{ ...styles.startBtn, marginTop: 28 }} onClick={onStart}>
         투어 시작하기
       </button>
@@ -150,55 +135,6 @@ const styles = {
   infoLabel: { fontSize: 11, color: '#999', marginBottom: 2 },
   infoValue: { fontSize: 14, fontWeight: 600, color: '#1a1a2e' },
   divider: { width: 1, height: 32, background: '#E5E7EB' },
-  routePreview: {
-    width: '100%',
-    marginBottom: 28,
-  },
-  routeLabel: {
-    fontSize: 12,
-    fontWeight: 700,
-    color: '#999',
-    marginBottom: 12,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  routeItems: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 10,
-  },
-  routeItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-  },
-  routeDot: {
-    width: 24,
-    height: 24,
-    borderRadius: '50%',
-    background: '#4F6FE8',
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: 700,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  routeInfo: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flex: 1,
-  },
-  routeName: {
-    fontSize: 14,
-    color: '#333',
-  },
-  routeSub: {
-    fontSize: 12,
-    color: '#bbb',
-  },
   startBtn: {
     width: '100%',
     padding: '18px',
