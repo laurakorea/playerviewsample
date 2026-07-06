@@ -1,6 +1,6 @@
 import { tourData } from '../data/tourData';
 
-export default function StartScreen({ onStart, onStart2, onStartOrsay }) {
+export default function StartScreen({ onStart, onStart2, onStartOrsay, onStartOrsay4 }) {
   const { artworks } = tourData;
   const totalMin = artworks.reduce((sum, a) => {
     const m = a.duration.match(/(\d+):(\d+):(\d+)/);
@@ -55,6 +55,9 @@ export default function StartScreen({ onStart, onStart2, onStartOrsay }) {
       </button>
       <button style={styles.orsayBtn} onClick={onStartOrsay}>
         🇫🇷 오르세 투어 시작하기
+      </button>
+      <button style={styles.orsay4Btn} onClick={onStartOrsay4}>
+        🗺️ 오르세 4차 · 지도+스크롤 투어
       </button>
       <p style={styles.hint}>이어폰을 연결하면 더 좋아요 🎧</p>
 
@@ -227,6 +230,17 @@ const styles = {
     fontSize: 17,
     fontWeight: 700,
     boxShadow: '0 4px 16px rgba(26,26,46,0.3)',
+    marginBottom: 12,
+  },
+  orsay4Btn: {
+    width: '100%',
+    padding: '18px',
+    borderRadius: 16,
+    background: '#FF730D',
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: 700,
+    boxShadow: '0 4px 16px rgba(255,115,13,0.3)',
     marginBottom: 12,
   },
   hint: {

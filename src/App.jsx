@@ -7,6 +7,7 @@ import AudioGuideScreen from './screens/AudioGuideScreen';
 import NavigationScreen from './screens/NavigationScreen';
 import PlayerV2 from './screens/PlayerV2';
 import OrsayPlayer from './screens/OrsayPlayer';
+import OrsayFeed from './screens/OrsayFeed';
 
 export default function App() {
   const [screen, setScreen] = useState('start');
@@ -51,6 +52,10 @@ export default function App() {
     setScreen('orsay');
   };
 
+  const handleStartOrsay4 = () => {
+    setScreen('orsay4');
+  };
+
   const handleNavigate = () => {
     setScreen('navigate');
   };
@@ -77,7 +82,13 @@ export default function App() {
   return (
     <div>
       {screen === 'start' && (
-        <StartScreen onStart={handleStart} onStart2={handleStart2} onStartOrsay={handleStartOrsay} />
+        <StartScreen onStart={handleStart} onStart2={handleStart2} onStartOrsay={handleStartOrsay} onStartOrsay4={handleStartOrsay4} />
+      )}
+      {screen === 'orsay4' && (
+        <OrsayFeed
+          artworks={orsayArtworks}
+          onHome={() => setScreen('start')}
+        />
       )}
       {screen === 'orsay' && (
         <OrsayPlayer

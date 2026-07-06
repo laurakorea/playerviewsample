@@ -629,11 +629,11 @@ export default function OrsayPlayer({
   );
 }
 
-function roomName(room) {
+export function roomName(room) {
   return room === '입구' || room === '조각홀' ? room : `${room}관`;
 }
 
-function floorLabel(a) {
+export function floorLabel(a) {
   if (!a.floor) return a.subtitle || '';
   const f = orsayFloorMaps[a.floor];
   const fl = f ? f.label : `${a.floor}층`;
@@ -641,7 +641,7 @@ function floorLabel(a) {
 }
 
 // 캐로젤 (carouselImages 있을 때만, 없으면 단일 이미지)
-function ArtCarousel({ artwork, hasAudio, isPlaying }) {
+export function ArtCarousel({ artwork, hasAudio, isPlaying, aspect = '1 / 1', full = false }) {
   const images = artwork.carouselImages?.length > 1 ? artwork.carouselImages : null;
   const [idx, setIdx] = useState(0);
   const touchRef = useRef(null);
@@ -660,7 +660,7 @@ function ArtCarousel({ artwork, hasAudio, isPlaying }) {
 
   if (!images) {
     return (
-      <div style={styles.artBig}>
+      <div style={{ ...styles.artBig, aspectRatio: aspect, ...(full ? { width: '100%' } : {}) }}>
         <ArtImage src={artwork.imageSrc} alt={artwork.title} />
         {artwork.star && <span style={styles.badge}>핵심</span>}
       </div>
@@ -684,7 +684,7 @@ function ArtCarousel({ artwork, hasAudio, isPlaying }) {
         {images.map((src, i) => (
           <div key={i} style={{
             width: `${ITEM_W}%`,
-            aspectRatio: '1 / 1',
+            aspectRatio: aspect,
             flexShrink: 0,
             borderRadius: 8,
             overflow: 'hidden',
@@ -703,7 +703,7 @@ function ArtCarousel({ artwork, hasAudio, isPlaying }) {
 }
 
 // 작품 이미지 (없으면 플레이스홀더)
-function ArtImage({ src, alt, cover, contain }) {
+export function ArtImage({ src, alt, cover, contain }) {
   const [err, setErr] = useState(false);
   useEffect(() => { setErr(false); }, [src]);
   if (!src || err) {
@@ -720,7 +720,7 @@ function ArtImage({ src, alt, cover, contain }) {
   );
 }
 
-function Controls({ big, isPlaying, hasAudio, onPlay, onPrev, onNext, onNudge }) {
+export function Controls({ big, isPlaying, hasAudio, onPlay, onPrev, onNext, onNudge }) {
   const size = big ? styles.ctrlBig : styles.ctrl;
   return (
     <div style={styles.controls}>
@@ -736,7 +736,7 @@ function Controls({ big, isPlaying, hasAudio, onPlay, onPrev, onNext, onNudge })
 }
 
 // 층별 이미지 도면 + 순서 핀 + 경로선
-function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, showRoute, pinActive, centerTrigger, stripActive, onPinClick, onMapClick, onToggleRoute }) {
+export function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, showRoute, pinActive, centerTrigger, stripActive, onPinClick, onMapClick, onToggleRoute }) {
   const current = artworks[currentIndex];
   const playing = artworks[playingIndex];
   const [floor, setFloor] = useState(current.floor || 1);
