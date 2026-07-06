@@ -451,7 +451,7 @@ const styles = {
   title: { margin: 0, color: W, fontSize: 21, fontWeight: 700, lineHeight: 1.25, letterSpacing: '-0.04em' },
   likeBtn: { width: 40, height: 40, border: 'none', background: BTN, fontSize: 20, cursor: 'pointer',
     display: 'flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 auto', borderRadius: 999 },
-  hero: { position: 'relative', margin: '18px 18px 0', aspectRatio: '16 / 9', borderRadius: 16,
+  hero: { position: 'relative', margin: '12px 18px 0', height: 'clamp(80px, 13vh, 116px)', borderRadius: 16,
     overflow: 'hidden', background: '#1f1f23' },
 
   playerCard: { margin: '20px 18px 0', background: CARD, borderRadius: 22, padding: '20px 20px 22px' },
