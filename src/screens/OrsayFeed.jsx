@@ -395,11 +395,11 @@ const BG = '#0b0b0d', CARD = '#141417', BTN = '#161619', ORANGE = '#f2760f',
 const FONT = "'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif";
 
 const styles = {
-  root: { position: 'relative', display: 'flex', flexDirection: 'column', height: '100dvh', minHeight: '100vh',
-    background: BG, fontFamily: FONT, color: W, overflow: 'hidden', textAlign: 'left' },
+  root: { position: 'relative', display: 'flex', flexDirection: 'column', height: '100dvh', maxHeight: '100dvh',
+    background: BG, fontFamily: FONT, color: W, overflow: 'hidden', overscrollBehavior: 'none', textAlign: 'left' },
 
-  // 상단 고정
-  fixedTop: { position: 'relative', zIndex: 3, flex: '0 0 auto', background: BG },
+  // 상단 고정 (지도영역) — 지도:오디오 = 65:45
+  fixedTop: { position: 'relative', zIndex: 3, flex: '65 1 0', minHeight: 0, display: 'flex', flexDirection: 'column', background: BG },
   header: { padding: '14px 18px 12px', display: 'flex', alignItems: 'center', gap: 10 },
   hdrBtn: { width: 40, height: 40, border: 'none', background: BTN, color: W, display: 'flex', alignItems: 'center',
     justifyContent: 'center', cursor: 'pointer', borderRadius: 999, fontSize: 20, flex: '0 0 auto' },
@@ -409,15 +409,15 @@ const styles = {
     background: 'transparent', color: SUB, transition: 'all .15s' },
   segOn: { background: W, color: BG },
 
-  mapWrap: { position: 'relative', height: 'clamp(320px, 65dvh, 680px)', overflow: 'hidden',
+  mapWrap: { position: 'relative', flex: 1, minHeight: 0, overflow: 'hidden',
     background: 'radial-gradient(120% 90% at 50% 28%,#1c1c20 0%,#151518 55%,#0f0f12 100%)' },
   scrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 96, pointerEvents: 'none', zIndex: 3,
     background: 'linear-gradient(180deg,rgba(11,11,13,0) 0%,rgba(11,11,13,0.55) 55%,#0b0b0d 100%)' },
   // 핀 클릭 시 하단 스트립 (이전 장소 · 작품 카드 · 다음 장소)
   strip: { position: 'absolute', left: 0, right: 0, bottom: 10, zIndex: 6, display: 'flex', alignItems: 'flex-end',
     gap: 10, padding: '0 14px', overflowX: 'auto', scrollSnapType: 'x mandatory' },
-  stripCard: { flex: '0 0 auto', width: 132, scrollSnapAlign: 'center', display: 'flex', flexDirection: 'column', gap: 6 },
-  stripThumb: { position: 'relative', width: 132, height: 92, borderRadius: 14, overflow: 'hidden', background: '#1f1f23',
+  stripCard: { flex: '0 0 auto', width: 100, scrollSnapAlign: 'center', display: 'flex', flexDirection: 'column', gap: 5 },
+  stripThumb: { position: 'relative', width: 100, height: 70, borderRadius: 12, overflow: 'hidden', background: '#1f1f23',
     border: '2px solid transparent', boxShadow: '0 8px 20px rgba(0,0,0,0.5)', cursor: 'pointer' },
   stripThumbOn: { border: `2px solid ${ORANGE}` },
   stripEq: { position: 'absolute', left: 8, bottom: 8, display: 'flex', alignItems: 'flex-end', gap: 2.5, height: 12 },
@@ -437,8 +437,8 @@ const styles = {
   stripPlaceName: { color: SUB2, fontSize: 12, fontWeight: 700 },
 
   // 스크롤 시트
-  sheet: { flex: '1 1 auto', overflowY: 'auto', position: 'relative', zIndex: 4, marginTop: -28,
-    background: BG, borderRadius: '26px 26px 0 0', WebkitOverflowScrolling: 'touch' },
+  sheet: { flex: '45 1 0', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', position: 'relative',
+    zIndex: 4, marginTop: -28, background: BG, borderRadius: '26px 26px 0 0', WebkitOverflowScrolling: 'touch' },
   handleWrap: { position: 'sticky', top: 0, zIndex: 5, padding: '12px 0 8px', display: 'flex', justifyContent: 'center',
     background: 'linear-gradient(180deg,#0b0b0d 70%,rgba(11,11,13,0))' },
   handle: { width: 38, height: 4, borderRadius: 999, background: '#3a3a3f' },

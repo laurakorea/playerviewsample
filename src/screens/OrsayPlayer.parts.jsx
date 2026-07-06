@@ -355,8 +355,8 @@ export function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, 
       </div>
 
       {/* 하단 버튼 그룹: 경로 + 층 선택 (v2는 우측, 기본은 좌측) */}
-      <div style={{ position: 'absolute', zIndex: 6, bottom: stripActive ? 162 : (v2 ? '50%' : 10),
-                    ...(v2 ? { right: 12, transform: 'translateY(50%)' } : { left: 10 }),
+      <div style={{ position: 'absolute', zIndex: 6,
+                    ...(v2 ? { top: 12, right: 12 } : { left: 10, bottom: stripActive ? 162 : 10 }),
                     display: 'flex', flexDirection: 'column', alignItems: v2 ? 'flex-end' : 'flex-start',
                     gap: v2 ? 10 : 8, transition: 'bottom 0.3s cubic-bezier(0.4,0,0.2,1)' }}>
         <button
