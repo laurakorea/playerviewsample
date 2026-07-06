@@ -247,6 +247,11 @@ export default function OrsayFeed({ artworks, onHome }) {
           </button>
         </div>
 
+        {/* 작품 이미지 */}
+        <div style={styles.hero}>
+          <ArtImage src={art.imageSrc} alt={art.title} cover />
+        </div>
+
         {/* 플레이어 카드 */}
         <div style={styles.playerCard}>
           <div style={styles.progBar} onClick={seek}>
@@ -404,7 +409,7 @@ const styles = {
     background: 'transparent', color: SUB, transition: 'all .15s' },
   segOn: { background: W, color: BG },
 
-  mapWrap: { position: 'relative', height: 'clamp(232px, 34dvh, 322px)', overflow: 'hidden',
+  mapWrap: { position: 'relative', height: 'clamp(320px, 65dvh, 680px)', overflow: 'hidden',
     background: 'radial-gradient(120% 90% at 50% 28%,#1c1c20 0%,#151518 55%,#0f0f12 100%)' },
   scrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 96, pointerEvents: 'none', zIndex: 3,
     background: 'linear-gradient(180deg,rgba(11,11,13,0) 0%,rgba(11,11,13,0.55) 55%,#0b0b0d 100%)' },
@@ -446,6 +451,8 @@ const styles = {
   title: { margin: 0, color: W, fontSize: 21, fontWeight: 700, lineHeight: 1.25, letterSpacing: '-0.04em' },
   likeBtn: { width: 40, height: 40, border: 'none', background: BTN, fontSize: 20, cursor: 'pointer',
     display: 'flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 auto', borderRadius: 999 },
+  hero: { position: 'relative', margin: '18px 18px 0', aspectRatio: '16 / 9', borderRadius: 16,
+    overflow: 'hidden', background: '#1f1f23' },
 
   playerCard: { margin: '20px 18px 0', background: CARD, borderRadius: 22, padding: '20px 20px 22px' },
   progBar: { position: 'relative', height: 5, borderRadius: 999, background: '#2a2a2e', cursor: 'pointer' },
