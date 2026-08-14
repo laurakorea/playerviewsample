@@ -120,7 +120,8 @@ export default function PlayerV2({
   const fmt = (s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
   const totalDisplay = duration > 0 ? fmt(duration) : artwork.duration?.slice(3) ?? '0:00';
 
-  const vh = () => window.innerHeight / 100;
+  const frameH = () => (document.querySelector('.app-shell')?.clientHeight || window.innerHeight);
+  const vh = () => frameH() / 100;
   const onDown = (e) => {
     dragRef.current = { dragging: true, startY: e.clientY, startH: SHEET_VH[snap] * vh() };
     setDragH(SHEET_VH[snap] * vh());
@@ -129,7 +130,7 @@ export default function PlayerV2({
   const onMove = (e) => {
     if (!dragRef.current.dragging) return;
     const dy = dragRef.current.startY - e.clientY;
-    const h = Math.max(0, Math.min(window.innerHeight * 0.88, dragRef.current.startH + dy));
+    const h = Math.max(0, Math.min(frameH() * 0.88, dragRef.current.startH + dy));
     setDragH(h);
   };
   const onUp = () => {
@@ -148,7 +149,7 @@ export default function PlayerV2({
     setDragH(null);
   };
 
-  const sheetH = dragH != null ? `${dragH}px` : `${SHEET_VH[snap]}vh`;
+  const sheetH = dragH != null ? `${dragH}px` : `${SHEET_VH[snap]}%`;
   const sheetTrans = dragH != null ? 'none' : 'height 0.32s cubic-bezier(0.4,0,0.2,1)';
 
   const prevArtwork = browseIndex > 0 ? artworks[browseIndex - 1] : null;
@@ -223,7 +224,7 @@ export default function PlayerV2({
 
         {isFull ? (
           <div style={styles.fullWrap}>
-            <div style={{ ...styles.artBig, width: '100%', height: '80vw', aspectRatio: 'unset', margin: '0', borderRadius: 0, boxShadow: 'none', background: 'none' }}>
+            <div style={{ ...styles.artBig, width: '100%', height: 'auto', aspectRatio: '5 / 4', margin: '0', borderRadius: 0, boxShadow: 'none', background: 'none' }}>
               <ArtImage src={artwork.imageSrc} alt={artwork.title} />
               {artwork.star && <span style={styles.badge}>핵심</span>}
             </div>

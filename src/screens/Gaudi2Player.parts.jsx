@@ -1,25 +1,42 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { orsayFloorMaps, orsayRoomPins } from '../data/orsayTourData';
-import { styles, ORANGE } from './OrsayPlayer.styles';
+import { styles, ORANGE } from './Gaudi2Player.styles';
 import { loadGoogleMaps, MAP_STYLES, markerIcon, playingMarkerIcon } from './PlayerV2.parts';
 
-// SUB_MAP/전환 핀 마커: "이름" 라벨 + pinType별 오렌지 아이콘 (트랙 핀과 시각적으로 구분).
-// pinType 'start' → 달리는 사람, 그 외 → 접이식 지도. active=true면 살짝 확대.
+// gaudi2 지도 색상 분리 (복잡도 완화): 트랙 핀=오렌지(메인), 전환 핀=진회색, 경로선=뮤트 슬레이트.
+export const SUB_COLOR = '#475569'; // 전환 핀(내부/시작/야외로) — 진회색(slate-600)
+const ROUTE_COLOR = '#94A3B8';     // 전체 경로선 (뮤트 그레이)
+const SEG_COLOR = '#64748B';       // 현재→다음 구간 하이라이트 (슬레이트 그레이 — 색은 현재 위치(오렌지)에만)
+
+// SUB_MAP/전환 핀 마커: "이름" 라벨(비활성 시) + 원형 안에 흰 아이콘 (트랙 핀과 동일한 원형 형태).
+// pinType 'start'=달리는 사람 / 'navigation'=계단 / 그 외(sub)=지도. active=true면 살짝 확대.
 function subMapMarkerIcon(g, name, active = false, pinType = 'sub') {
-  const scale = active ? 1.18 : 1;
-  const w = Math.round(80 * scale), h = Math.round(64 * scale);
   const label = String(name ?? '');
-  const glyph = pinType === 'start'
-    ? `<g transform="translate(23,26) scale(1.42)" fill="${ORANGE}" stroke="#ffffff" stroke-width="0.8" paint-order="stroke" stroke-linejoin="round"><path d="M13.49 5.48c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm-3.6 13.9l1-4.4 2.1 2v6h2v-7.5l-2.1-2 .6-3c1.3 1.5 3.3 2.5 5.5 2.5v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1l-5.2 2.2v4.7h2v-3.4l1.8-.7-1.6 8.1-4.9-1-.4 2 7 1.4z"/></g>`
-    : `<g transform="translate(23,28)"><path d="M0 6 L11 2 L11 26 L0 30 Z" fill="${ORANGE}" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/><path d="M11 2 L23 6 L23 30 L11 26 Z" fill="#E86A1C" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/><path d="M23 6 L34 2 L34 26 L23 30 Z" fill="${ORANGE}" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/></g>`;
-  // 활성 시엔 이름을 InfoWindow 툴팁으로 표시하므로 마커에 박힌 텍스트는 뺀다(텍스트+툴팁 중복 방지).
-  // 비활성 시엔 툴팁 없이 마커에 이름 텍스트만.
-  const text = active ? '' : `<text x="40" y="18" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="14" font-weight="700" fill="#2A2A2A" stroke="#ffffff" stroke-width="3.5" paint-order="stroke" stroke-linejoin="round">${label}</text>`;
-  const svg = `<svg width="${w}" height="${h}" viewBox="0 0 80 64" xmlns="http://www.w3.org/2000/svg">${text}${glyph}</svg>`;
+  const icon = pinType === 'start'
+    ? `<g transform="translate(31.5,33.5) scale(0.72)" fill="#ffffff"><path d="M13.49 5.48c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm-3.6 13.9l1-4.4 2.1 2v6h2v-7.5l-2.1-2 .6-3c1.3 1.5 3.3 2.5 5.5 2.5v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1l-5.2 2.2v4.7h2v-3.4l1.8-.7-1.6 8.1-4.9-1-.4 2 7 1.4z"/></g>`
+    : pinType === 'navigation'
+    ? `<g transform="translate(31.5,33.5) scale(0.72)" fill="#ffffff"><path d="M3 22 L3 17 L8 17 L8 13 L13 13 L13 9 L18 9 L18 5 L22 5 L22 22 Z"/></g>`
+    : `<g transform="translate(31.5,34) scale(0.5)" fill="#ffffff"><path d="M0 6 L11 2 L11 26 L0 30 Z"/><path d="M11 2 L23 6 L23 30 L11 26 Z" fill-opacity="0.55"/><path d="M23 6 L34 2 L34 26 L23 30 Z"/></g>`;
+  const circle = `<circle cx="40" cy="42" r="13" fill="${active ? ORANGE : SUB_COLOR}" stroke="#ffffff" stroke-width="2"/>`;
+  // 활성: 이름은 InfoWindow 툴팁으로 표시 → 원(핀) 주변만 타이트하게 크롭.
+  // 큰 SVG면 구글이 툴팁을 아이콘 상단(원보다 한참 위)에 붙여 핀에서 떠 보임 → 원 중심 앵커의 작은 아이콘으로 해결.
+  if (active) {
+    const size = 40;
+    const svg = `<svg width="${size}" height="${size}" viewBox="24 26 32 32" xmlns="http://www.w3.org/2000/svg">${circle}${icon}</svg>`;
+    return {
+      url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
+      scaledSize: new g.maps.Size(size, size),
+      anchor: new g.maps.Point(20, 20), // 원 중심(뷰박스 24,26 기준 32칸의 중앙)
+    };
+  }
+  // 비활성: 원 위에 이름 라벨 노출(툴팁 없음).
+  const w = 80, h = 64;
+  const text = `<text x="40" y="16" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="14" font-weight="700" fill="#2A2A2A" stroke="#ffffff" stroke-width="3.5" paint-order="stroke" stroke-linejoin="round">${label}</text>`;
+  const svg = `<svg width="${w}" height="${h}" viewBox="0 0 80 64" xmlns="http://www.w3.org/2000/svg">${text}${circle}${icon}</svg>`;
   return {
     url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
     scaledSize: new g.maps.Size(w, h),
-    anchor: new g.maps.Point(w / 2, h - Math.round(6 * scale)),
+    anchor: new g.maps.Point(40, 42),
   };
 }
 
@@ -133,8 +150,8 @@ export function Controls({ big, isPlaying, hasAudio, onPlay, onPrev, onNext, onN
 }
 
 // 야외(GPS) 구역용 구글지도 — 장소(stop)당 마커 1개 + 경로. PlayerV2 지도 헬퍼 재사용.
-function iwContent(text) {
-  return `<div style="position:relative;display:inline-block"><div style="font-family:sans-serif;font-size:12px;font-weight:700;color:#fff;background:${ORANGE};padding:6px 10px;border-radius:6px;white-space:nowrap">${text}</div><div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:6px solid ${ORANGE};"></div></div>`;
+function iwContent(text, color = ORANGE) {
+  return `<div style="position:relative;display:inline-block"><div style="font-family:sans-serif;font-size:12px;font-weight:700;color:#fff;background:${color};padding:6px 10px;border-radius:6px;white-space:nowrap">${text}</div><div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:6px solid ${color};"></div></div>`;
 }
 
 function GpsFloorMap({ stops, currentSeq, playingRoom, showRoute, pinActive, centerTrigger, fitTrigger = 0, onPinClick, onMapClick, locateRef, subMapPins = [], onSubMapActivate, forcedSubActive = null }) {
@@ -145,6 +162,7 @@ function GpsFloorMap({ stops, currentSeq, playingRoom, showRoute, pinActive, cen
   const boundsRef = useRef(null); // 전체 핀을 담는 bounds (지도 열 때 fit용)
   const resizeObsRef = useRef(null);
   const routeRef = useRef(null);
+  const segRouteRef = useRef(null); // 현재→다음 핀 오렌지 하이라이트 구간
   const iwRef = useRef(null);
   const userMarkerRef = useRef(null);
   const onPinRef = useRef(onPinClick);
@@ -154,6 +172,34 @@ function GpsFloorMap({ stops, currentSeq, playingRoom, showRoute, pinActive, cen
   // SUB_MAP 핀 활성 상태는 부모(subStop)가 단일 소스. forcedSubActive(=활성 핀 이름)로 내려옴.
   const forcedSubActiveRef = useRef(forcedSubActive);
   useEffect(() => { onPinRef.current = onPinClick; onMapClickRef.current = onMapClick; onSubMapActivateRef.current = onSubMapActivate; subMapPinsRef.current = subMapPins; forcedSubActiveRef.current = forcedSubActive; });
+
+  // 현재(seq) → 다음(seq+1) 핀 구간의 경로 좌표. 둘 다 좌표가 있어야 함.
+  const segPathFor = (seq) => {
+    const from = stops.find(s => s.seq === seq && s.lat != null);
+    const to = stops.find(s => s.seq === seq + 1 && s.lat != null);
+    return (from && to) ? [{ lat: from.lat, lng: from.lng }, { lat: to.lat, lng: to.lng }] : [];
+  };
+  // 전환 핀(예: "시작") 활성 시: 그 핀 → 목적지 구간. targetPin/targetSeq/target floor 순.
+  // 목적지가 이 지도(같은 floor)에 없으면 null → 트랙 구간으로 폴백.
+  const activeSubSegPath = () => {
+    const name = forcedSubActiveRef.current;
+    if (!name) return null;
+    const sp = (subMapPinsRef.current || []).find(p => p.name === name);
+    if (!sp || sp.lat == null) return null;
+    let dest = null;
+    if (sp.targetPin) {
+      const tp = (subMapPinsRef.current || []).find(p => p.name === sp.targetPin && p.lat != null);
+      dest = tp ? { lat: tp.lat, lng: tp.lng } : null;
+    } else if (sp.targetSeq != null) {
+      const st = stops.find(s => s.seq === sp.targetSeq && s.lat != null); // 시작 → 지점24(seq22)
+      dest = st ? { lat: st.lat, lng: st.lng } : null;
+    } else {
+      const st = stops.find(s => s.floor === sp.target && s.lat != null);
+      dest = st ? { lat: st.lat, lng: st.lng } : null;
+    }
+    return dest ? [{ lat: sp.lat, lng: sp.lng }, dest] : null;
+  };
+  const computeSegPath = () => activeSubSegPath() ?? segPathFor(currentSeq);
 
   // GPS(내 위치) 버튼용 함수 등록 — FloorMapView가 locateRef.current() 호출
   useEffect(() => {
@@ -218,10 +264,18 @@ function GpsFloorMap({ stops, currentSeq, playingRoom, showRoute, pinActive, cen
           if (mapRef.current && mapRef.current.getZoom() > 16) mapRef.current.setZoom(16);
         });
       };
-      fitAll();
       // 시트 열림 애니메이션으로 컨테이너 크기가 늦게/여러 번 확정되어도 전체 핀에 맞춰 재fit.
       // 사용자가 지도를 직접 드래그하기 전까지만 자동 fit.
       let userMoved = false;
+      // 전환으로 진입한 전환 핀(예: 야외로→시작)이 있으면 전체 fit 대신 그 핀에 센터+확대 → 핀 인지가 쉬움.
+      const focusSub = (subMapPinsRef.current || []).find(sp => sp.name === forcedSubActiveRef.current && sp.lat != null);
+      if (focusSub) {
+        map.setCenter({ lat: focusSub.lat, lng: focusSub.lng });
+        map.setZoom(17);
+        userMoved = true; // 자동 전체-fit 억제
+      } else {
+        fitAll();
+      }
       map.addListener('dragstart', () => { userMoved = true; });
       if (typeof ResizeObserver !== 'undefined' && elRef.current) {
         resizeObsRef.current = new ResizeObserver(() => { if (!userMoved) fitAll(); });
@@ -236,10 +290,16 @@ function GpsFloorMap({ stops, currentSeq, playingRoom, showRoute, pinActive, cen
         if (wps.length < 2) return null;
         return new g.maps.Polyline({
           path: wps.map(w => ({ lat: w.lat, lng: w.lng })), map, strokeOpacity: 0,
-          icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.5, strokeColor: ORANGE, strokeWeight: 4, scale: 1 }, offset: '0', repeat: '8px' }],
+          icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.5, strokeColor: ROUTE_COLOR, strokeWeight: 4, scale: 1 }, offset: '0', repeat: '8px' }],
           visible: showRoute,
         });
       }).filter(Boolean);
+      // 현재→다음 핀 구간: 파스텔 오렌지 실선 + 흰 화살표 (이미지 도면의 seg와 동일 색·개념)
+      segRouteRef.current = new g.maps.Polyline({
+        path: computeSegPath(), map, strokeColor: SEG_COLOR, strokeOpacity: 1, strokeWeight: 8, zIndex: 2,
+        icons: [{ icon: { path: g.maps.SymbolPath.FORWARD_OPEN_ARROW, strokeOpacity: 1, strokeColor: '#fff', fillOpacity: 0, scale: 1 }, offset: '50%', repeat: '24px' }],
+        visible: showRoute,
+      });
       iwRef.current = new g.maps.InfoWindow({ disableAutoPan: true, pixelOffset: new g.maps.Size(0, -8) });
       // 빈 지도 클릭 → SUB_MAP 활성 해제(부모에 통지) + 시트 닫기
       map.addListener('click', () => { iwRef.current?.close(); onSubMapActivateRef.current?.(null); onMapClickRef.current?.(); });
@@ -280,8 +340,10 @@ function GpsFloorMap({ stops, currentSeq, playingRoom, showRoute, pinActive, cen
       // 재마운트 시 이미 활성(subStop) 상태면 툴팁 즉시 표시 (실내→내부 역방향 대응)
       const activeEntry = subMapMarkersRef.current.find(e => e.pin.name === forcedSubActiveRef.current);
       if (activeEntry) {
-        iwRef.current.setContent(iwContent(activeEntry.pin.name));
-        iwRef.current.open({ map, anchor: activeEntry.m });
+        if (activeEntry.pin.pinType !== 'start') { // restart(출구)는 툴팁 숨김 — 필 버튼이 목적지를 안내
+          iwRef.current.setContent(iwContent(activeEntry.pin.name, ORANGE));
+          iwRef.current.open({ map, anchor: activeEntry.m });
+        }
         const p = activeEntry.m.getPosition();
         if (p) map.panTo(p);
       }
@@ -294,6 +356,8 @@ function GpsFloorMap({ stops, currentSeq, playingRoom, showRoute, pinActive, cen
       subMapMarkersRef.current = [];
       routeRef.current?.forEach(pl => pl.setMap(null));
       routeRef.current = null;
+      segRouteRef.current?.setMap(null);
+      segRouteRef.current = null;
       resizeObsRef.current?.disconnect();
       resizeObsRef.current = null;
       if (userMarkerRef.current) { userMarkerRef.current.setMap(null); userMarkerRef.current = null; }
@@ -312,9 +376,13 @@ function GpsFloorMap({ stops, currentSeq, playingRoom, showRoute, pinActive, cen
       m.setLabel(isPlaying || !showRoute ? null : { text: String(pinNo ?? seq), color: '#fff', fontSize: '11px', fontWeight: '700' });
       m.setZIndex(seq === currentSeq ? 99 : isPlaying ? 98 : seq);
     });
+    segRouteRef.current?.setPath(computeSegPath()); // 현재→다음 구간 갱신
   }, [currentSeq, playingRoom, showRoute]);
 
-  useEffect(() => { routeRef.current?.forEach(pl => pl.setVisible(showRoute)); }, [showRoute]);
+  useEffect(() => {
+    routeRef.current?.forEach(pl => pl.setVisible(showRoute));
+    segRouteRef.current?.setVisible(showRoute);
+  }, [showRoute]);
 
   // 부모(subStop)가 SUB_MAP 활성 상태를 제어 → 마커 강조/툴팁("이름")/센터 동기화.
   // 툴팁은 라벨 역할만(트랙 핀과 동일). 실제 진입은 하단 "실내 입장" 카드가 담당.
@@ -326,11 +394,12 @@ function GpsFloorMap({ stops, currentSeq, playingRoom, showRoute, pinActive, cen
       m.setIcon(subMapMarkerIcon(g, pin.name, on, pin.pinType));
       m.setZIndex(on ? 100 : 51);
     });
+    segRouteRef.current?.setPath(computeSegPath()); // 전환 핀 활성/해제 시 구간 경로 갱신 (시작 → 지점24 등)
     if (!iw) return;
     const entry = subMapMarkersRef.current.find(e => e.pin.name === forcedSubActive);
     if (entry) {
-      iw.setContent(iwContent(entry.pin.name));
-      iw.open({ map, anchor: entry.m });
+      if (entry.pin.pinType === 'start') iw.close(); // restart(출구)는 툴팁 숨김 — 필 버튼이 목적지를 안내
+      else { iw.setContent(iwContent(entry.pin.name, ORANGE)); iw.open({ map, anchor: entry.m }); }
       const pos = entry.m.getPosition();
       if (pos) map.panTo(pos);
     } else {
@@ -351,6 +420,7 @@ function GpsFloorMap({ stops, currentSeq, playingRoom, showRoute, pinActive, cen
   // 지도 열 때: 전체 핀이 한 화면에 보이도록 fit (시트가 열려 컨테이너 크기가 확정된 뒤 재적용).
   useEffect(() => {
     if (!fitTrigger) return;
+    if (forcedSubActiveRef.current) return; // 전환 핀 포커스 중엔 전체 fit로 덮어쓰지 않음 (예: 시작 핀 확대 유지)
     const map = mapRef.current, b = boundsRef.current, g = window.google;
     if (!map || !b) return;
     map.fitBounds(b, 48);
@@ -520,12 +590,16 @@ export function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, 
   // 전체 경로 (그레이 선)
   const allPts = densePts(floorStops);
 
-  // 활성 핀 → 다음 핀 구간 (오렌지 실선 + chevron)
+  // 활성 핀 → 다음 핀 구간 (하이라이트 실선 + chevron).
+  // 다음이 트랙 stop이면 그 핀, 없으면 이 floor의 "다음 순서(afterSeq===currentSeq)" 전환 핀(예: 21 → 야외로).
   const segFrom = floorStops.find(s => s.seq === currentSeq);
-  const segTo = floorStops.find(s => s.seq === currentSeq + 1);
+  const segToStop = floorStops.find(s => s.seq === currentSeq + 1);
+  const segToPos = segToStop
+    ? pins[segToStop.room]
+    : (floorSubMaps.find(sp => sp.afterSeq === currentSeq && sp.x != null) || null);
   let seg = null;
-  if (segFrom && segTo) {
-    const a = pins[segFrom.room], b = pins[segTo.room];
+  if (segFrom && segToPos) {
+    const a = pins[segFrom.room], b = segToPos;
     const dist = Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
     // 마커 너비(5) + 간격(1.5) = 6.5 단위마다 1개
     const spacing = 4.5;
@@ -613,19 +687,19 @@ export function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, 
                 <defs>
                   <marker id="arrowBlock" markerWidth="2" markerHeight="2" refX="1" refY="1"
                           orient="auto" markerUnits="userSpaceOnUse">
-                    <rect x="0" y="0" width="2" height="2" rx="0.2" fill={ORANGE} />
+                    <rect x="0" y="0" width="2" height="2" rx="0.2" fill={SEG_COLOR} />
                     <path d="M0.5,0.3 L1.6,1 L0.5,1.7" fill="none" stroke="#fff" strokeWidth="0.5"
                           strokeLinecap="round" strokeLinejoin="round" />
                   </marker>
                 </defs>
                 {/* 전체 경로: 그레이 선 */}
                 {allPts && (
-                  <polyline points={allPts} fill="none" stroke="#FFBA94" strokeWidth="0.5"
-                            strokeLinejoin="round" strokeLinecap="round" strokeDasharray="1 1" opacity="0.6" />
+                  <polyline points={allPts} fill="none" stroke="#CBD5E1" strokeWidth="0.5"
+                            strokeLinejoin="round" strokeLinecap="round" strokeDasharray="1 1" opacity="0.7" />
                 )}
-                {/* 활성 → 다음: 주황 실선 + 블록 화살표 */}
+                {/* 활성 → 다음: 파스텔 오렌지 실선 + 블록 화살표 */}
                 {seg && (
-                  <polyline points={seg} fill="none" stroke={ORANGE} strokeWidth="2"
+                  <polyline points={seg} fill="none" stroke={SEG_COLOR} strokeWidth="2"
                             strokeLinejoin="round" strokeLinecap="round"
                             markerMid="url(#arrowBlock)" />
                 )}
@@ -675,8 +749,8 @@ export function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, 
                 <div key={sp.name} style={{ position: 'absolute', left: `${sp.x}%`, top: `${sp.y}%`, transform: `translate(-50%,-50%) scale(${(on ? 1.15 : 1) / zoom})`, transformOrigin: 'center center', zIndex: 5, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                   {on ? (
                     <div style={styles.pinTooltipWrap}>
-                      <div style={styles.pinTooltip}>{sp.name}</div>
-                      <div style={styles.pinTooltipArrow} />
+                      <div style={{ ...styles.pinTooltip, background: ORANGE }}>{sp.name}</div>
+                      <div style={{ ...styles.pinTooltipArrow, borderTopColor: ORANGE }} />
                     </div>
                   ) : (
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#2A2A2A', textShadow: '0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff', marginBottom: 2, whiteSpace: 'nowrap' }}>{sp.name}</div>
@@ -686,17 +760,13 @@ export function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, 
                     onPointerDown={(e) => e.stopPropagation()}
                     onTouchStart={(e) => e.stopPropagation()}
                     onTouchEnd={(e) => { e.stopPropagation(); e.preventDefault(); onSubMapActivate?.(sp.name); }}
-                    style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', lineHeight: 0 }} aria-label={sp.name}>
-                    {sp.pinType === 'navigation' ? (
-                      <svg width="34" height="34" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M3 22 L3 17 L8 17 L8 13 L13 13 L13 9 L18 9 L18 5 L22 5 L22 22 Z" fill={ORANGE} stroke="#fff" strokeWidth="1.2" strokeLinejoin="round" />
-                      </svg>
+                    style={{ width: 28, height: 28, borderRadius: '50%', background: on ? ORANGE : SUB_COLOR, border: '2px solid #fff', boxShadow: '0 2px 6px rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, cursor: 'pointer' }} aria-label={sp.name}>
+                    {sp.pinType === 'start' ? (
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="#fff"><path d="M13.49 5.48c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm-3.6 13.9l1-4.4 2.1 2v6h2v-7.5l-2.1-2 .6-3c1.3 1.5 3.3 2.5 5.5 2.5v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1l-5.2 2.2v4.7h2v-3.4l1.8-.7-1.6 8.1-4.9-1-.4 2 7 1.4z" /></svg>
+                    ) : sp.pinType === 'navigation' ? (
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="#fff"><path d="M3 22 L3 17 L8 17 L8 13 L13 13 L13 9 L18 9 L18 5 L22 5 L22 22 Z" /></svg>
                     ) : (
-                      <svg width="36" height="32" viewBox="0 0 34 32" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M0 6 L11 2 L11 26 L0 30 Z" fill={ORANGE} stroke="#fff" strokeWidth="1.5" strokeLinejoin="round" />
-                        <path d="M11 2 L23 6 L23 30 L11 26 Z" fill="#E86A1C" stroke="#fff" strokeWidth="1.5" strokeLinejoin="round" />
-                        <path d="M23 6 L34 2 L34 26 L23 30 Z" fill={ORANGE} stroke="#fff" strokeWidth="1.5" strokeLinejoin="round" />
-                      </svg>
+                      <svg width="16" height="14" viewBox="0 0 34 32" fill="#fff"><path d="M0 6 L11 2 L11 26 L0 30 Z" /><path d="M11 2 L23 6 L23 30 L11 26 Z" fillOpacity="0.55" /><path d="M23 6 L34 2 L34 26 L23 30 Z" /></svg>
                     )}
                   </button>
                 </div>

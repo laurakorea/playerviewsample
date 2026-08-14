@@ -66,7 +66,8 @@ function buildSegPath(seq, currentIndex) {
 
 function markerIcon(g, state) {
   // state: 'active' | 'visited' | 'upcoming'
-  const fillColor = state === 'active' ? ORANGE : state === 'visited' ? '#A0A0A0' : ORANGE;
+  // 활성=오렌지 / 지나감=회색 / 다음=슬레이트(#64748B) — 이미지 도면 핀 색상과 일치
+  const fillColor = state === 'active' ? ORANGE : state === 'visited' ? '#A0A0A0' : '#64748B';
   const fillOpacity = state === 'active' ? 1 : 0.5;
   const scale = state === 'active' ? 15 : 12;
   return {
@@ -343,4 +344,4 @@ function MapView({ artworks, currentIndex, playingIndex, snap, showRoute, pinAct
 }
 
 
-export { ArtImage, Controls, MapView };
+export { ArtImage, Controls, MapView, loadGoogleMaps, MAP_STYLES, markerIcon, playingMarkerIcon };

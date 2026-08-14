@@ -54,17 +54,7 @@ body {
   margin: 0;
 }
 
-#root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-}
+/* #root 레이아웃은 App.css(모바일 프레임)에서 정의합니다. */
 
 h1,
 h2 {

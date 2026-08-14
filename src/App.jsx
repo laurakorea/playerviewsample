@@ -2,11 +2,14 @@ import { useState, useEffect } from 'react';
 import './App.css';
 import { tourData } from './data/tourData';
 import { orsayTourData } from './data/orsayTourData';
+import { gaudiTourData, gaudiFloorMaps, gaudiRoomPins, gaudiSubMapPins } from './data/gaudiTourData';
+import { gaudiTourData2, gaudiFloorMaps2, gaudiRoomPins2, gaudiSubMapPins2 } from './data/gaudiTourData2';
 import StartScreen from './screens/StartScreen';
 import AudioGuideScreen from './screens/AudioGuideScreen';
 import NavigationScreen from './screens/NavigationScreen';
 import PlayerV2 from './screens/PlayerV2';
 import OrsayPlayer from './screens/OrsayPlayer';
+import Gaudi2Player from './screens/Gaudi2Player';
 import OrsayFeed from './screens/OrsayFeed';
 
 export default function App() {
@@ -14,6 +17,10 @@ export default function App() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [orsayIndex, setOrsayIndex] = useState(0);
   const orsayArtworks = orsayTourData.artworks;
+  const [gaudiIndex, setGaudiIndex] = useState(0);
+  const gaudiArtworks = gaudiTourData.artworks;
+  const [gaudi2Index, setGaudi2Index] = useState(0);
+  const gaudi2Artworks = gaudiTourData2.artworks;
 
   // URL(해시) ↔ 화면 상태 동기화
   useEffect(() => {
@@ -56,6 +63,11 @@ export default function App() {
     setScreen('orsay4');
   };
 
+  const handleStartGaudi = () => {
+    setGaudiIndex(0);
+    setScreen('gaudi');
+  };
+
   const handleNavigate = () => {
     setScreen('navigate');
   };
@@ -80,9 +92,41 @@ export default function App() {
   };
 
   return (
-    <div>
+    <div className="app-shell">
       {screen === 'start' && (
-        <StartScreen onStart={handleStart} onStart2={handleStart2} onStartOrsay={handleStartOrsay} onStartOrsay4={handleStartOrsay4} />
+        <StartScreen onStart={handleStart} onStart2={handleStart2} onStartOrsay={handleStartOrsay} onStartOrsay4={handleStartOrsay4} onStartGaudi={handleStartGaudi} />
+      )}
+      {screen === 'gaudi' && (
+        <OrsayPlayer
+          artwork={gaudiArtworks[gaudiIndex]}
+          artworks={gaudiArtworks}
+          currentIndex={gaudiIndex}
+          total={gaudiArtworks.length}
+          floorMaps={gaudiFloorMaps}
+          roomPins={gaudiRoomPins}
+          subMapPins={gaudiSubMapPins}
+          museumName="가우디 반일투어"
+          onPrev={() => setGaudiIndex(i => Math.max(0, i - 1))}
+          onNext={() => setGaudiIndex(i => Math.min(gaudiArtworks.length - 1, i + 1))}
+          onSelectIndex={(i) => setGaudiIndex(i)}
+          onHome={() => setScreen('start')}
+        />
+      )}
+      {screen === 'gaudi2' && (
+        <Gaudi2Player
+          artwork={gaudi2Artworks[gaudi2Index]}
+          artworks={gaudi2Artworks}
+          currentIndex={gaudi2Index}
+          total={gaudi2Artworks.length}
+          floorMaps={gaudiFloorMaps2}
+          roomPins={gaudiRoomPins2}
+          subMapPins={gaudiSubMapPins2}
+          museumName="가우디 반일투어 (2)"
+          onPrev={() => setGaudi2Index(i => Math.max(0, i - 1))}
+          onNext={() => setGaudi2Index(i => Math.min(gaudi2Artworks.length - 1, i + 1))}
+          onSelectIndex={(i) => setGaudi2Index(i)}
+          onHome={() => setScreen('start')}
+        />
       )}
       {screen === 'orsay4' && (
         <OrsayFeed

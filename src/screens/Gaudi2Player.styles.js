@@ -11,6 +11,7 @@ const BG_PAGE = '#FFFFFF';     // Gray.0
 const BG_SUBTLE = '#F9F9F9';   // Gray.100
 const BG_MUTED = '#F2F4F7';    // Gray.200
 const BORDER_DEFAULT = '#D1D1D1'; // Gray.400
+const SUB_COLOR = '#475569';   // Slate.600 / 전환(길찾기) 핀
 const PLAYER_BG = '#000000';   // Gray.900
 const FONT = "'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif";
 const styles = {
@@ -165,7 +166,7 @@ const styles = {
   mapIconBtn: { width: 34, height: 34, padding: 0, borderRadius: 9999, border: `1px solid ${BORDER_DEFAULT}`,
     background: BG_PAGE, color: TXT_STRONG, cursor: 'pointer',
     boxShadow: '0 2px 8px rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', outline: 'none' },
-  mapTopBtnOn: { background: W, border: `1.5px solid ${ORANGE}`, color: ORANGE },
+  mapTopBtnOn: { background: '#334155', border: '1.5px solid #334155', color: W },
   listWrap: { flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 },
   listHeader: { flexShrink: 0, background: BG_MUTED },
   listTopBarOuter: { display: 'flex', alignItems: 'center', padding: '10px 12px 6px',
@@ -196,8 +197,8 @@ const styles = {
 
   sheetBody: { position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 },
   mapBox: { position: 'relative', flex: 1, overflow: 'hidden', minHeight: 0, background: '#E3E3E3' },
-  stripOverlay: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 5, padding: '0 16px 16px',
-    background: 'linear-gradient(transparent, rgba(255,255,255,1) 80%, rgb(255,255,255) 100%)' },
+  stripOverlay: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 5, padding: '8px 16px 16px',
+    background: 'linear-gradient(transparent, rgba(255,255,255,0.96) 46%, rgb(255,255,255) 68%)' },
   pinActionBar: { display: 'flex', gap: 8, padding: '8px 0 4px' },
 
   // 층 도면
@@ -237,14 +238,16 @@ const styles = {
   routeSvg: { position: 'absolute', inset: 0, width: '100%', height: '100%', zIndex: 1, pointerEvents: 'none' },
   pinTooltipWrap: { position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
     marginBottom: 8, display: 'flex', flexDirection: 'column', alignItems: 'center', pointerEvents: 'none' },
-  pinTooltip: { whiteSpace: 'nowrap', background: ORANGE, color: W, fontSize: 11, fontWeight: 600,
-    padding: '8px 10px', borderRadius: 6, boxShadow: '0 2px 6px rgba(0,0,0,0.3)' },
+  // 구글지도 툴팁(iwContent)과 동일하게: 12px/700, padding 6px 10px, radius 6, 그림자 없음.
+  // lineHeight 'normal' 명시 — 전역 :root의 145%(index.css) 상속으로 pill이 높아지는 것 방지.
+  pinTooltip: { whiteSpace: 'nowrap', background: ORANGE, color: W, fontSize: 12, fontWeight: 700,
+    lineHeight: 'normal', padding: '6px 10px', borderRadius: 6 },
   pinStartBubble: { whiteSpace: 'nowrap', background: ORANGE, color: W, fontSize: 13, fontStyle: 'italic', fontWeight: 700,
     padding: '6px 12px', borderRadius: 20, boxShadow: '0 2px 6px rgba(0,0,0,0.3)', letterSpacing: '0.5px' },
-  pinTooltipArrow: { width: 0, height: 0, borderLeft: '5px solid transparent', borderRight: '5px solid transparent',
-    borderTop: `5px solid ${ORANGE}` },
+  pinTooltipArrow: { width: 0, height: 0, borderLeft: '6px solid transparent', borderRight: '6px solid transparent',
+    borderTop: `6px solid ${ORANGE}` },
   pin: { position: 'absolute', zIndex: 2, transform: 'translate(-50%,-50%)', width: 26, height: 26,
-    borderRadius: '50%', background: 'rgba(255,115,13,0.6)', color: W, fontSize: 13, fontWeight: 700, border: `2px solid ${BG_PAGE}`,
+    borderRadius: '50%', background: '#64748B', color: W, fontSize: 13, fontWeight: 700, border: `2px solid ${BG_PAGE}`,
     boxShadow: '0 2px 6px rgba(0,0,0,0.3)', cursor: 'pointer', display: 'flex', alignItems: 'center',
     justifyContent: 'center', lineHeight: 1 },
   pinOn: { background: ORANGE, transform: 'scale(1.3)', zIndex: 4 },
@@ -290,9 +293,6 @@ const styles = {
   eqBar: { width: 3, background: '#fff', borderRadius: 2, transformOrigin: 'bottom',
     animation: 'eq 0.8s ease-in-out infinite' },
   nowPlayTxt: { position: 'absolute', bottom: 5, fontSize: 9, fontWeight: 700, color: '#fff', letterSpacing: 0.5 },
-  stripName: { fontSize: 12, color: TXT_DEFAULT, marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-    textAlign: 'left' },
-  stripNameOn: { color: ORANGE, fontWeight: 700 },
 
   nextStopCard: { border: 'none', borderRadius: 10, padding: '0 0 2px', display: 'flex',
     flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', gap: 0 },
@@ -308,6 +308,43 @@ const styles = {
   nextStopLabel: { fontSize: 11, color: TXT_SUBTLE, marginTop: 2 },
   nextStopName: { fontSize: 13, fontWeight: 700, color: TXT_STRONG, marginTop: 1,
     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 88 },
+
+  // 핀 스트립 — 재생 어포던스는 썸네일에, 이동은 강등 (개수 무관 동일 구조)
+  // 헤더: 장소명(+트랙 수) / 전환 라벨
+  stripHead: { display: 'flex', alignItems: 'baseline', gap: 8, padding: '2px 2px 6px' },
+  stripHeadName: { fontSize: 14, fontWeight: 700, color: TXT_STRONG,
+    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+  stripHeadCount: { fontSize: 12, fontWeight: 500, color: TXT_SUBTLE, flexShrink: 0 },
+
+  // 트랙 썸네일 (항상 노출, 제목 없음)
+  stripCardSm: { flexShrink: 0, width: 68, background: 'none', border: 'none', padding: 0, cursor: 'pointer' },
+  stripThumbSm: { position: 'relative', width: 68, height: 68, borderRadius: 10, overflow: 'hidden',
+    background: BG_MUTED, border: '2px solid transparent' },
+  // 잠금(미구매) 상태: 딤 + 중앙 자물쇠. 좋아요 버튼(우하단)과 안 겹치게 중앙 배치
+  stripLockOverlay: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+    background: 'rgba(0,0,0,0.34)', pointerEvents: 'none' },
+  stripLockBadge: { width: 26, height: 26, borderRadius: '50%', background: 'rgba(0,0,0,0.55)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  // 이동 유도 핀(전환) — 콘텐츠 아님. 썸네일 크기 대신 낮은 가로 필 버튼
+  stripMoveBtn: { display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left',
+    background: SUB_COLOR, color: W, border: 'none', borderRadius: 12, padding: '12px 14px', cursor: 'pointer', marginTop: 2 },
+  stripMoveIcon: { width: 28, height: 28, borderRadius: 8, background: 'rgba(255,255,255,0.18)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  stripMoveLabel: { flex: 1, minWidth: 0, fontSize: 14, fontWeight: 700,
+    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+  stripMoveSub: { fontWeight: 400, color: 'rgba(255,255,255,0.85)' },
+  stripMoveChev: { fontSize: 22, fontWeight: 700, lineHeight: 1, flexShrink: 0 },
+
+  // 얇은 이동 보조 줄
+  stripNavRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 6, minHeight: 30 },
+  stripNavItem: { display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none',
+    color: TXT_SUBTLE, fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: '6px 2px', maxWidth: '48%', overflow: 'hidden' },
+  stripNavPrev: { marginRight: 'auto' },
+  stripNavNext: { marginLeft: 'auto' },
+  stripNavChev: { fontSize: 18, fontWeight: 700, lineHeight: 1, color: TXT_SUBTLE, flexShrink: 0 },
+  stripNavName: { color: TXT_DEFAULT, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+  stripNavItemOff: { color: TXT_DISABLED, cursor: 'default' },
+  stripNavChevOff: { color: TXT_DISABLED },
 
   listFilter: { height: 34, padding: '0 12px', borderRadius: 9999, border: `1px solid ${BORDER_DEFAULT}`,
     background: BG_PAGE, color: TXT_STRONG, fontSize: 13, fontWeight: 400, cursor: 'pointer',

@@ -12,7 +12,7 @@ const PLAYER_BG = '#000000';
 const FONT = "'Pretendard Variable', 'Pretendard', -apple-system, BlinkMacSystemFont, sans-serif";
 
 const styles = {
-  root: { position: 'relative', height: '100dvh', minHeight: '100vh', background: PLAYER_BG, overflow: 'hidden', color: W, fontFamily: FONT },
+  root: { position: 'relative', height: '100%', minHeight: 0, background: PLAYER_BG, overflow: 'hidden', color: W, fontFamily: FONT },
 
   player: { position: 'absolute', top: 0, left: 0, right: 0, display: 'flex', flexDirection: 'column', background: PLAYER_BG, overflow: 'hidden' },
   topBar: { position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 16px', background: 'linear-gradient(rgba(0,0,0,0.45), transparent)' },

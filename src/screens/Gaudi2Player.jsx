@@ -1,13 +1,13 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { orsayFloorMaps } from '../data/orsayTourData';
-import { styles, ORANGE, TXT_DEFAULT, TXT_SUBTLE, BORDER_DEFAULT } from './OrsayPlayer.styles';
-import { roomName, floorLabel, ArtCarousel, ArtImage, Controls, FloorMapView } from './OrsayPlayer.parts';
+import { styles, ORANGE, TXT_DEFAULT, TXT_SUBTLE, BORDER_DEFAULT } from './Gaudi2Player.styles';
+import { roomName, floorLabel, ArtCarousel, ArtImage, Controls, FloorMapView } from './Gaudi2Player.parts';
 
 // 스냅별 시트 높이 (뷰포트 높이 대비 %)
 //  0: 지도 닫힘 → 풀 플레이어 / 1: 지도+스트립 / 2: 지도 크게(90%)
 const SHEET_VH = [0, 62, 90];
 
-export default function OrsayPlayer({
+export default function Gaudi2Player({
   artwork, artworks, currentIndex, total,
   onPrev, onNext, onHome, onSelectIndex,
   floorMaps = orsayFloorMaps, roomPins, subMapPins, museumName = '오르세 미술관',
@@ -112,17 +112,30 @@ export default function OrsayPlayer({
     return s ? s.idxs[0] : null;
   };
 
-  // 이전/다음 장소(stop) — SUB_MAP 가상 stop 인식
+  // 이전/다음 장소(stop) — SUB_MAP 가상 stop 인식. 전환 핀 위에선 전환 체인(targetPin/targetSeq)을 따라 필과 같은 목적지를 가리킴.
   const prevStop = useMemo(() => {
-    if (subStop) return roomStops.find(s => s.seq === subStop.afterSeq) || null;              // 내부 → 13
+    if (subStop) {
+      const via = subStopList.find(x => x.targetPin === subStop.name);                         // 이 전환을 가리키는 앞 전환 핀 (시작 ← 야외로)
+      if (via) return asSubStop(via);
+      return roomStops.find(s => s.seq === subStop.afterSeq) || null;                           // 내부/야외로 → afterSeq stop
+    }
     if (!activeStop) return null;
-    const sp = subStopList.find(x => x.afterSeq === activeStop.seq - 1);                       // 14 → 내부
+    const landed = subStopList.find(x => x.targetSeq === activeStop.seq);                       // 이 stop으로 착지시키는 전환 (시작 → seq22)
+    if (landed) return asSubStop(landed);
+    const sp = subStopList.find(x => x.afterSeq === activeStop.seq - 1);                        // 14 → 내부
     return sp ? asSubStop(sp) : (roomStops.find(s => s.seq === activeStop.seq - 1) || null);
   }, [subStop, activeStop, roomStops, subStopList]);
   const nextStop = useMemo(() => {
-    if (subStop) return roomStops.find(s => s.seq === subStop.afterSeq + 1) || null;           // 내부 → 14
+    if (subStop) {
+      if (subStop.targetPin) {                                                                  // 야외로 → 시작(다음 전환 핀)
+        const tp = subStopList.find(x => x.name === subStop.targetPin);
+        return tp ? asSubStop(tp) : null;
+      }
+      if (subStop.targetSeq != null) return roomStops.find(s => s.seq === subStop.targetSeq) || null;   // 시작 → seq22
+      return roomStops.find(s => s.floor === subStop.target) || null;                           // 내부 → target floor 첫 stop
+    }
     if (!activeStop) return roomStops[0] || null;
-    const sp = subStopList.find(x => x.afterSeq === activeStop.seq);                           // 13 → 내부
+    const sp = subStopList.find(x => x.afterSeq === activeStop.seq);                            // 13 → 내부
     return sp ? asSubStop(sp) : (roomStops.find(s => s.seq === activeStop.seq + 1) || null);
   }, [subStop, activeStop, roomStops, subStopList]);
 
@@ -145,6 +158,35 @@ export default function OrsayPlayer({
   const onEnded = () => {
     setIsPlaying(false);
     if (autoplay && currentIndex < total - 1) onNext();
+  };
+
+  // ── 핀 스트립: 잠금(미구매)/재생 상태는 썸네일에, 이동은 강등 ──
+  // 구매/권한 상태 — 데모용(false=미구매). 실제 서비스에선 엔타이틀먼트/API 상태로 교체.
+  const purchased = false;
+  const isLocked = (a) => !purchased && !!a?.room && !a?.free; // 유료(장소) 트랙은 구매 전 잠금. 인트로(room 없음)·free 트랙은 무료.
+  const stopLabel = (s) => (s ? (s.isSubMap ? (s.name ?? s.cardLabel ?? '이동') : roomName(s.room)) : ''); // 전환 핀은 툴팁과 동일하게 name("나가기"/"출구")
+  const playTrack = (gi) => {                                              // 썸네일 탭 = 그 트랙 재생 (자동재생 arm)
+    if (isLocked(artworks[gi])) return;                                    // 잠금 트랙은 재생 불가
+    autoPlayOnSelectRef.current = true;
+    onSelectIndex(gi);
+    setBrowseIndex(gi);
+    setSnap(1);
+  };
+  const goToStop = (s) => {                                                 // prev/next 장소 이동(로직 동일, 위계만 강등)
+    if (!s) return;
+    if (s.isSubMap) { setSubStop(s); setPinActive(true); setSnap(1); }
+    else { setSubStop(null); setBrowseIndex(s.idxs[0]); setPinActive(true); setSnap(1); setMapCenterTrigger(n => n + 1); }
+  };
+  const goTransition = () => {                                             // 전환 핀 주 CTA (실내 입장/야외로/시작)
+    if (!subStop) return;
+    if (subStop.targetPin) {
+      const tp = subStopList.find(x => x.name === subStop.targetPin);
+      if (tp) { setSubStop(asSubStop(tp)); setPinActive(true); setSnap(1); }
+      return;
+    }
+    const goIdx = transitionTargetIdx(subStop);
+    setSubStop(null);
+    if (goIdx != null) { setBrowseIndex(goIdx); setPinActive(true); setSnap(1); setMapCenterTrigger(n => n + 1); }
   };
 
   // ── 오디오 ───────────────────────────────────
@@ -434,107 +476,97 @@ export default function OrsayPlayer({
             {snap >= 1 && pinActive && (activeStop || subStop) && (
               <div style={styles.stripOverlay}>
 
-                <div style={styles.strip}>
-                  {/* 이전 코스 카드 — strip 첫 번째 */}
-                  {prevStop && (
-                    <button
-                      style={{ ...styles.stripCard, ...styles.nextStopCard }}
-                      onClick={() => {
-                        if (prevStop.isSubMap) { setSubStop(prevStop); setPinActive(true); setSnap(1); }
-                        else { setSubStop(null); setBrowseIndex(prevStop.idxs[0]); setPinActive(true); setSnap(1); setMapCenterTrigger(n => n + 1); }
-                      }}
-                    >
-                      <div style={styles.nextStopThumb}>
-                        <div style={styles.prevStopCircle}>‹</div>
-                      </div>
-                      <div style={styles.nextStopLabel}>이전 장소</div>
-                      <div style={styles.nextStopName}>{roomName(prevStop.room)}</div>
-                    </button>
-                  )}
-                  {/* 내부(SUB_MAP) 활성 중엔 트랙 없음 → 중간 트랙 썸네일 숨김 */}
-                  {!subStop && stripIdxs.map((gi) => {
-                    const a = artworks[gi];
-                    const active = gi === currentIndex;
-                    return (
-                      <div key={a.id} style={styles.stripCard}>
-                        <div style={{ ...styles.stripThumb, ...(active ? styles.stripThumbOn : {}) }}
-                             onClick={() => { autoPlayOnSelectRef.current = true; onSelectIndex(gi); setBrowseIndex(gi); setSnap(1); }}>
-                          <ArtImage src={a.imageSrc} alt={a.title} cover />
-                          {active && isPlaying && (
-                            <div style={styles.stripEqBadge}>
-                              <span style={{ ...styles.eqBar, animationDelay: '0s', height: 6 }} />
-                              <span style={{ ...styles.eqBar, animationDelay: '0.15s', height: 10 }} />
-                              <span style={{ ...styles.eqBar, animationDelay: '0.3s', height: 7 }} />
+                {subStop ? (
+                  /* 이동 유도 핀 — 콘텐츠가 아니라 '이동'이므로 가로 필 버튼(썸네일 크기 X) */
+                  <button style={styles.stripMoveBtn} onClick={goTransition}>
+                    <span style={styles.stripMoveIcon}>
+                      {subStop.pinType === 'navigation' ? (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M3 22 L3 17 L8 17 L8 13 L13 13 L13 9 L18 9 L18 5 L22 5 L22 22 Z" /></svg>
+                      ) : subStop.pinType === 'start' ? (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M13.49 5.48c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm-3.6 13.9l1-4.4 2.1 2v6h2v-7.5l-2.1-2 .6-3c1.3 1.5 3.3 2.5 5.5 2.5v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1l-5.2 2.2v4.7h2v-3.4l1.8-.7-1.6 8.1-4.9-1-.4 2 7 1.4z" /></svg>
+                      ) : (
+                        <svg width="18" height="18" viewBox="0 -960 960 960" fill="#fff" aria-hidden="true">{subStop.pinType === 'next'
+                          ? <path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-800h280v80H200v560h280v80H200Zm440-160-55-58 102-102H360v-80h327L585-622l55-58 200 200-200 200Z" />
+                          : <path d="M480-120v-80h280v-560H480v-80h280q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H480Zm-80-160-55-58 102-102H120v-80h327L345-622l55-58 200 200-200 200Z" />}</svg>
+                      )}
+                    </span>
+                    <span style={styles.stripMoveLabel}>
+                      {subStop.pinType === 'navigation'
+                        ? subStop.name                                              // "나가기" — 이름 자체가 행동어
+                        : subStop.pinType === 'start'
+                        ? `${subStop.cardName ?? '다음 장소'}로 이동`               // "지점 24로 이동" — 다음 장소로
+                        : `${subStop.name ?? '이동'}로 이동`}                       {/* "내부로 이동" — 지도 전환 */}
+                    </span>
+                    <span style={styles.stripMoveChev}>›</span>
+                  </button>
+                ) : (
+                  <>
+                    {/* 헤더 — 장소명(+트랙 수). 트랙명은 썸네일에서 제거(잘려서 정보가치 낮음) */}
+                    <div style={styles.stripHead}>
+                      <span style={styles.stripHeadName}>{roomName(activeStop?.room)}</span>
+                      {stripIdxs.length > 1 && <span style={styles.stripHeadCount}>트랙 {stripIdxs.length}개</span>}
+                    </div>
+
+                    {/* 트랙 스트립 — 제목 없이 썸네일만. 상태: 재생(eq)/잠금(자물쇠)/일반 */}
+                    <div style={styles.strip}>
+                      {stripIdxs.map((gi) => {
+                        const a = artworks[gi];
+                        const active = gi === currentIndex;
+                        const playing = active && isPlaying;
+                        return (
+                          <div key={a.id} style={styles.stripCardSm}>
+                            <div style={{ ...styles.stripThumbSm, ...(active ? styles.stripThumbOn : {}) }}
+                                 onClick={() => playTrack(gi)}>
+                              <ArtImage src={a.imageSrc} alt={a.title} cover />
+                              {playing ? (
+                                <div style={styles.stripEqBadge}>
+                                  <span style={{ ...styles.eqBar, animationDelay: '0s', height: 6 }} />
+                                  <span style={{ ...styles.eqBar, animationDelay: '0.15s', height: 10 }} />
+                                  <span style={{ ...styles.eqBar, animationDelay: '0.3s', height: 7 }} />
+                                </div>
+                              ) : isLocked(a) ? (
+                                <div style={styles.stripLockOverlay}>
+                                  <div style={styles.stripLockBadge}>
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M12 1a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2h-1V6a5 5 0 0 0-5-5zm3 8H9V6a3 3 0 1 1 6 0v3z" /></svg>
+                                  </div>
+                                </div>
+                              ) : null}
+                              <button
+                                style={isLiked(a.id) ? styles.stripHeartOn : styles.stripHeart}
+                                onClick={(e) => { e.stopPropagation(); toggleLike(a.id, e); }}
+                              >
+                                {isLiked(a.id) ? '♥' : '♡'}
+                              </button>
                             </div>
-                          )}
-                          <button
-                            style={isLiked(a.id) ? styles.stripHeartOn : styles.stripHeart}
-                            onClick={(e) => { e.stopPropagation(); toggleLike(a.id, e); }}
-                          >
-                            {isLiked(a.id) ? '♥' : '♡'}
-                          </button>
-                        </div>
-                        <div style={{ ...styles.stripName, ...(active ? styles.stripNameOn : {}) }}
-                             onClick={() => { autoPlayOnSelectRef.current = true; onSelectIndex(gi); setBrowseIndex(gi); setSnap(1); }}>
-                          {a.star ? '★ ' : ''}{a.title}
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {/* 다음 장소 카드 — strip 마지막.
-                      전환 핀 활성(subStop) 시엔 지도 전환 카드로 바뀜 (sub=들어가기 / next=나가기). */}
-                  {subStop ? (
-                    <button
-                      style={{ ...styles.stripCard, ...styles.nextStopCard }}
-                      onClick={() => {
-                        // targetPin: 다른 전환 핀으로 이동 + 활성 (예: 야외로 → 시작 핀 포지션·활성)
-                        if (subStop.targetPin) {
-                          const tp = subStopList.find(x => x.name === subStop.targetPin);
-                          if (tp) { setSubStop(asSubStop(tp)); setPinActive(true); setSnap(1); }
-                          return;
-                        }
-                        const goIdx = transitionTargetIdx(subStop);
-                        setSubStop(null);
-                        if (goIdx != null) { setBrowseIndex(goIdx); setPinActive(true); setSnap(1); setMapCenterTrigger(n => n + 1); }
-                      }}
-                    >
-                      <div style={styles.nextStopThumb}>
-                        <div style={{ width: 48, height: 48, borderRadius: 12, background: ORANGE, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          {subStop.pinType === 'navigation' ? (
-                            <svg width="26" height="26" viewBox="0 0 24 24" fill="#fff" aria-hidden="true">
-                              <path d="M3 22 L3 17 L8 17 L8 13 L13 13 L13 9 L18 9 L18 5 L22 5 L22 22 Z" />
-                            </svg>
-                          ) : subStop.pinType === 'start' ? (
-                            <svg width="26" height="26" viewBox="0 0 24 24" fill="#fff" aria-hidden="true">
-                              <path d="M13.49 5.48c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm-3.6 13.9l1-4.4 2.1 2v6h2v-7.5l-2.1-2 .6-3c1.3 1.5 3.3 2.5 5.5 2.5v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1l-5.2 2.2v4.7h2v-3.4l1.8-.7-1.6 8.1-4.9-1-.4 2 7 1.4z" />
-                            </svg>
-                          ) : (
-                            <svg width="26" height="26" viewBox="0 -960 960 960" fill="#fff" aria-hidden="true">
-                              {subStop.pinType === 'next'
-                                ? <path d="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-800h280v80H200v560h280v80H200Zm440-160-55-58 102-102H360v-80h327L585-622l55-58 200 200-200 200Z" />
-                                : <path d="M480-120v-80h280v-560H480v-80h280q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H480Zm-80-160-55-58 102-102H120v-80h327L345-622l55-58 200 200-200 200Z" />}
-                            </svg>
-                          )}
-                        </div>
-                      </div>
-                      <div style={styles.nextStopLabel}>{subStop.cardLabel ?? '이동'}</div>
-                      <div style={styles.nextStopName}>{subStop.cardName ?? floorMaps[subStop.target]?.label ?? ''}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+
+                {/* 얇은 이동 보조 줄 — 모든 핀 상태에서 항상 노출(일관성). 없는 방향은 그레이 플레이스홀더로 자리 유지 */}
+                <div style={styles.stripNavRow}>
+                  {prevStop ? (
+                    <button style={{ ...styles.stripNavItem, ...styles.stripNavPrev }} onClick={() => goToStop(prevStop)}>
+                      <span style={styles.stripNavChev}>‹</span>
+                      <span style={styles.stripNavName}>{stopLabel(prevStop)}</span>
                     </button>
-                  ) : nextStop ? (
-                    <button
-                      style={{ ...styles.stripCard, ...styles.nextStopCard }}
-                      onClick={() => {
-                        if (nextStop.isSubMap) { setSubStop(nextStop); setPinActive(true); setSnap(1); }
-                        else { setSubStop(null); setBrowseIndex(nextStop.idxs[0]); setPinActive(true); setSnap(1); setMapCenterTrigger(n => n + 1); }
-                      }}
-                    >
-                      <div style={styles.nextStopThumb}>
-                        <div style={styles.nextStopCircle}>›</div>
-                      </div>
-                      <div style={styles.nextStopLabel}>다음 장소</div>
-                      <div style={styles.nextStopName}>{roomName(nextStop.room)}</div>
+                  ) : (
+                    <span style={{ ...styles.stripNavItem, ...styles.stripNavPrev, ...styles.stripNavItemOff }} aria-hidden="true">
+                      <span style={{ ...styles.stripNavChev, ...styles.stripNavChevOff }}>‹</span>
+                    </span>
+                  )}
+                  {nextStop ? (
+                    <button style={{ ...styles.stripNavItem, ...styles.stripNavNext }} onClick={() => goToStop(nextStop)}>
+                      <span style={styles.stripNavName}>{stopLabel(nextStop)}</span>
+                      <span style={styles.stripNavChev}>›</span>
                     </button>
-                  ) : null}
+                  ) : (
+                    <span style={{ ...styles.stripNavItem, ...styles.stripNavNext, ...styles.stripNavItemOff }} aria-hidden="true">
+                      <span style={{ ...styles.stripNavChev, ...styles.stripNavChevOff }}>›</span>
+                    </span>
+                  )}
                 </div>
               </div>
             )}
@@ -721,4 +753,4 @@ export default function OrsayPlayer({
 }
 
 
-export { FloorMapView, ArtCarousel, Controls, ArtImage, floorLabel } from './OrsayPlayer.parts';
+export { FloorMapView, ArtCarousel, Controls, ArtImage, floorLabel } from './Gaudi2Player.parts';

@@ -9,19 +9,50 @@ body {
   background: #f0f2f5;
   display: flex;
   justify-content: center;
-  align-items: flex-start;
+  align-items: center;
   min-height: 100vh;
 }
 
+/* 모바일 뷰: 기본은 화면을 꽉 채움 (실제 모바일) */
 #root {
   width: 100%;
   max-width: 390px;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100svh;
   background: #fff;
   position: relative;
   overflow: hidden;
   box-shadow: 0 0 40px rgba(0,0,0,0.12);
   margin: 0 auto;
+  /* index.css(템플릿 잔재) 상속값 무력화 */
+  min-height: 0;
+  border-inline: none;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 화면 안쪽 스크롤 영역 (각 스크린이 프레임 안에서 스크롤) */
+.app-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 데스크톱: 세로까지 고정된 폰 프레임으로 표시 */
+@media (min-width: 431px) {
+  body {
+    padding: 24px 0;
+  }
+  #root {
+    height: 844px;
+    max-height: calc(100vh - 48px);
+    border-radius: 28px;
+    box-shadow: 0 12px 48px rgba(0, 0, 0, 0.18);
+  }
 }
 
 button {

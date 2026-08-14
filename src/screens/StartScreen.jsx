@@ -1,6 +1,6 @@
 import { tourData } from '../data/tourData';
 
-export default function StartScreen({ onStart, onStart2, onStartOrsay, onStartOrsay4 }) {
+export default function StartScreen({ onStart, onStart2, onStartOrsay, onStartOrsay4, onStartGaudi }) {
   const { artworks } = tourData;
   const totalMin = artworks.reduce((sum, a) => {
     const m = a.duration.match(/(\d+):(\d+):(\d+)/);
@@ -59,6 +59,9 @@ export default function StartScreen({ onStart, onStart2, onStartOrsay, onStartOr
       <button style={styles.orsay4Btn} onClick={onStartOrsay4}>
         🗺️ 오르세 4차 · 지도+스크롤 투어
       </button>
+      <button style={styles.gaudiBtn} onClick={onStartGaudi}>
+        🇪🇸 가우디 반일투어 (구글지도 + 실내도면)
+      </button>
       <p style={styles.hint}>이어폰을 연결하면 더 좋아요 🎧</p>
 
       <button style={{ ...styles.startBtn, marginTop: 28 }} onClick={onStart}>
@@ -74,7 +77,7 @@ const styles = {
     flexDirection: 'column',
     alignItems: 'center',
     padding: '40px 24px 40px',
-    minHeight: '100vh',
+    minHeight: '100%',
     background: '#fff',
   },
   header: {
@@ -177,6 +180,17 @@ const styles = {
     fontSize: 17,
     fontWeight: 700,
     boxShadow: '0 4px 16px rgba(255,115,13,0.3)',
+    marginBottom: 12,
+  },
+  gaudiBtn: {
+    width: '100%',
+    padding: '18px',
+    borderRadius: 16,
+    background: '#C1121F',
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: 700,
+    boxShadow: '0 4px 16px rgba(193,18,31,0.3)',
     marginBottom: 12,
   },
   hint: {
