@@ -10,6 +10,7 @@ import NavigationScreen from './screens/NavigationScreen';
 import PlayerV2 from './screens/PlayerV2';
 import OrsayPlayer from './screens/OrsayPlayer';
 import Gaudi2Player from './screens/Gaudi2Player';
+import Gaudi3Player from './screens/Gaudi3Player';
 import OrsayFeed from './screens/OrsayFeed';
 
 export default function App() {
@@ -21,6 +22,7 @@ export default function App() {
   const gaudiArtworks = gaudiTourData.artworks;
   const [gaudi2Index, setGaudi2Index] = useState(0);
   const gaudi2Artworks = gaudiTourData2.artworks;
+  const [gaudi3Index, setGaudi3Index] = useState(0); // gaudi3 = gaudi2 복제(스타일 실험용), 데이터 공유
 
   // URL(해시) ↔ 화면 상태 동기화
   useEffect(() => {
@@ -125,6 +127,22 @@ export default function App() {
           onPrev={() => setGaudi2Index(i => Math.max(0, i - 1))}
           onNext={() => setGaudi2Index(i => Math.min(gaudi2Artworks.length - 1, i + 1))}
           onSelectIndex={(i) => setGaudi2Index(i)}
+          onHome={() => setScreen('start')}
+        />
+      )}
+      {screen === 'gaudi3' && (
+        <Gaudi3Player
+          artwork={gaudi2Artworks[gaudi3Index]}
+          artworks={gaudi2Artworks}
+          currentIndex={gaudi3Index}
+          total={gaudi2Artworks.length}
+          floorMaps={gaudiFloorMaps2}
+          roomPins={gaudiRoomPins2}
+          subMapPins={gaudiSubMapPins2}
+          museumName="가우디 반일투어 (3)"
+          onPrev={() => setGaudi3Index(i => Math.max(0, i - 1))}
+          onNext={() => setGaudi3Index(i => Math.min(gaudi2Artworks.length - 1, i + 1))}
+          onSelectIndex={(i) => setGaudi3Index(i)}
           onHome={() => setScreen('start')}
         />
       )}
