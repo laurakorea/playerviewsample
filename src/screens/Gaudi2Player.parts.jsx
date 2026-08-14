@@ -40,6 +40,22 @@ function subMapMarkerIcon(g, name, active = false, pinType = 'sub') {
   };
 }
 
+// seq 1(투어 시작 = 까사바뜨요) 마커: 원 위에 "Start" 태그를 baked. 활성 아닐 때만 사용.
+function startMarkerIcon(g, state) {
+  const fill = state === 'visited' ? '#A0A0A0' : '#64748B';
+  const svg = `<svg width="84" height="60" viewBox="0 0 84 60" xmlns="http://www.w3.org/2000/svg">`
+    + `<rect x="21" y="2" width="42" height="22" rx="11" fill="${ORANGE}"/>`
+    + `<text x="42" y="17" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" font-size="12" font-style="italic" font-weight="700" fill="#ffffff">Start</text>`
+    + `<path d="M37 24 L47 24 L42 31 Z" fill="${ORANGE}"/>`
+    + `<circle cx="42" cy="44" r="12" fill="${fill}" stroke="#ffffff" stroke-width="2"/>`
+    + `</svg>`;
+  return {
+    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
+    scaledSize: new g.maps.Size(84, 60),
+    anchor: new g.maps.Point(42, 44), // 원 중심
+  };
+}
+
 export function roomName(room) {
   // 오르세: 숫자 방번호는 "N관", '입구'/'조각홀'은 그대로.
   // 가우디 등 이름 기반 데이터셋은 장소명을 그대로 표시.
@@ -310,7 +326,7 @@ function GpsFloorMap({ stops, currentSeq, playingRoom, showRoute, pinActive, cen
         const m = new g.maps.Marker({
           position: { lat: s.lat, lng: s.lng }, map,
           zIndex: s.seq === currentSeq ? 99 : isPlaying ? 98 : s.seq,
-          icon: isPlaying ? playingMarkerIcon(g) : markerIcon(g, state),
+          icon: isPlaying ? playingMarkerIcon(g) : (s.seq === 1 && state !== 'active' ? startMarkerIcon(g, state) : markerIcon(g, state)),
           label: isPlaying ? null : { text: String(s.pinNo ?? s.seq), color: '#fff', fontSize: '11px', fontWeight: '700' },
         });
         m.addListener('click', () => {
@@ -372,7 +388,7 @@ function GpsFloorMap({ stops, currentSeq, playingRoom, showRoute, pinActive, cen
     markersRef.current.forEach(({ m, room, seq, pinNo }) => {
       const state = seq === currentSeq ? 'active' : seq < currentSeq ? 'visited' : 'upcoming';
       const isPlaying = room === playingRoom;
-      m.setIcon(isPlaying ? playingMarkerIcon(g) : markerIcon(g, state));
+      m.setIcon(isPlaying ? playingMarkerIcon(g) : (seq === 1 && state !== 'active' ? startMarkerIcon(g, state) : markerIcon(g, state)));
       m.setLabel(isPlaying || !showRoute ? null : { text: String(pinNo ?? seq), color: '#fff', fontSize: '11px', fontWeight: '700' });
       m.setZIndex(seq === currentSeq ? 99 : isPlaying ? 98 : seq);
     });
