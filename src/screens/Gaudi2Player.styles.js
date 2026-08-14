@@ -198,7 +198,7 @@ const styles = {
   sheetBody: { position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minHeight: 0 },
   mapBox: { position: 'relative', flex: 1, overflow: 'hidden', minHeight: 0, background: '#E3E3E3' },
   stripOverlay: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 5, padding: '8px 16px 16px',
-    background: 'linear-gradient(transparent, rgba(255,255,255,0.96) 46%, rgb(255,255,255) 68%)' },
+    background: 'linear-gradient(transparent, rgb(255 255 255 / 45%) 40% 0, rgb(255 255 255 / 85%) 60%)' },
   pinActionBar: { display: 'flex', gap: 8, padding: '8px 0 4px' },
 
   // 층 도면
