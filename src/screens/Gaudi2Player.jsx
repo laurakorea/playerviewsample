@@ -5,7 +5,7 @@ import { roomName, floorLabel, ArtCarousel, ArtImage, Controls, FloorMapView } f
 
 // 스냅별 시트 높이 (뷰포트 높이 대비 %)
 //  0: 지도 닫힘 → 풀 플레이어 / 1: 지도+스트립 / 2: 지도 크게(90%)
-const SHEET_VH = [0, 62, 90];
+const SHEET_VH = [0, 65, 90];
 
 export default function Gaudi2Player({
   artwork, artworks, currentIndex, total,
@@ -164,7 +164,6 @@ export default function Gaudi2Player({
   // 구매/권한 상태 — 데모용(false=미구매). 실제 서비스에선 엔타이틀먼트/API 상태로 교체.
   const purchased = false;
   const isLocked = (a) => !purchased && !!a?.room && !a?.free; // 유료(장소) 트랙은 구매 전 잠금. 인트로(room 없음)·free 트랙은 무료.
-  const stopLabel = (s) => (s ? (s.isSubMap ? (s.name ?? s.cardLabel ?? '이동') : roomName(s.room)) : ''); // 전환 핀은 툴팁과 동일하게 name("나가기"/"출구")
   const playTrack = (gi) => {                                              // 썸네일 탭 = 그 트랙 재생 (자동재생 arm)
     if (isLocked(artworks[gi])) return;                                    // 잠금 트랙은 재생 불가
     autoPlayOnSelectRef.current = true;
@@ -492,23 +491,16 @@ export default function Gaudi2Player({
                     </span>
                     <span style={styles.stripMoveLabel}>
                       {subStop.pinType === 'navigation'
-                        ? subStop.name                                              // "나가기" — 이름 자체가 행동어
+                        ? subStop.name                                              // "출구로 나가기" — name이 곧 문구
                         : subStop.pinType === 'start'
                         ? `${subStop.cardName ?? '다음 장소'}로 이동`               // "지점 24로 이동" — 다음 장소로
-                        : `${subStop.name ?? '이동'}로 이동`}                       {/* "내부로 이동" — 지도 전환 */}
+                        : `${subStop.name ?? '내부'} 입장`}                          {/* "내부 입장" — 지도(실내) 진입 */}
                     </span>
                     <span style={styles.stripMoveChev}>›</span>
                   </button>
                 ) : (
-                  <>
-                    {/* 헤더 — 장소명(+트랙 수). 트랙명은 썸네일에서 제거(잘려서 정보가치 낮음) */}
-                    <div style={styles.stripHead}>
-                      <span style={styles.stripHeadName}>{roomName(activeStop?.room)}</span>
-                      {stripIdxs.length > 1 && <span style={styles.stripHeadCount}>트랙 {stripIdxs.length}개</span>}
-                    </div>
-
-                    {/* 트랙 스트립 — 제목 없이 썸네일만. 상태: 재생(eq)/잠금(자물쇠)/일반 */}
-                    <div style={styles.strip}>
+                  /* 트랙 스트립 — 썸네일만. 제목·트랙수는 하단 이동 바에 표시 */
+                  <div style={styles.strip}>
                       {stripIdxs.map((gi) => {
                         const a = artworks[gi];
                         const active = gi === currentIndex;
@@ -541,30 +533,31 @@ export default function Gaudi2Player({
                           </div>
                         );
                       })}
-                    </div>
-                  </>
+                  </div>
                 )}
 
-                {/* 얇은 이동 보조 줄 — 모든 핀 상태에서 항상 노출(일관성). 없는 방향은 그레이 플레이스홀더로 자리 유지 */}
-                <div style={styles.stripNavRow}>
+                {/* 하단 이동 바 — (◯‹) 활성 핀 제목[+트랙수] (›◯). 원형 이전/다음 버튼, 없는 방향은 그레이 비활성 */}
+                <div style={styles.stripNavBar}>
                   {prevStop ? (
-                    <button style={{ ...styles.stripNavItem, ...styles.stripNavPrev }} onClick={() => goToStop(prevStop)}>
-                      <span style={styles.stripNavChev}>‹</span>
-                      <span style={styles.stripNavName}>{stopLabel(prevStop)}</span>
+                    <button style={styles.stripNavCircle} onClick={() => goToStop(prevStop)} aria-label="이전">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
                     </button>
                   ) : (
-                    <span style={{ ...styles.stripNavItem, ...styles.stripNavPrev, ...styles.stripNavItemOff }} aria-hidden="true">
-                      <span style={{ ...styles.stripNavChev, ...styles.stripNavChevOff }}>‹</span>
+                    <span style={{ ...styles.stripNavCircle, ...styles.stripNavCircleOff }} aria-hidden="true">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
                     </span>
                   )}
+                  <div style={styles.stripNavCenter}>
+                    <div style={styles.stripNavTitle}>{subStop ? subStop.name : roomName(activeStop?.room)}</div>
+                    {!subStop && <div style={styles.stripNavSub}>트랙 {stripIdxs.length}개</div>}
+                  </div>
                   {nextStop ? (
-                    <button style={{ ...styles.stripNavItem, ...styles.stripNavNext }} onClick={() => goToStop(nextStop)}>
-                      <span style={styles.stripNavName}>{stopLabel(nextStop)}</span>
-                      <span style={styles.stripNavChev}>›</span>
+                    <button style={styles.stripNavCircle} onClick={() => goToStop(nextStop)} aria-label="다음">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
                     </button>
                   ) : (
-                    <span style={{ ...styles.stripNavItem, ...styles.stripNavNext, ...styles.stripNavItemOff }} aria-hidden="true">
-                      <span style={{ ...styles.stripNavChev, ...styles.stripNavChevOff }}>›</span>
+                    <span style={{ ...styles.stripNavCircle, ...styles.stripNavCircleOff }} aria-hidden="true">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
                     </span>
                   )}
                 </div>

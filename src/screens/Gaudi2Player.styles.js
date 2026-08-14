@@ -346,6 +346,17 @@ const styles = {
   stripNavItemOff: { color: TXT_DISABLED, cursor: 'default' },
   stripNavChevOff: { color: TXT_DISABLED },
 
+  // 하단 이동 바 — (◯‹) 활성 핀 제목[+트랙수] (›◯)
+  stripNavBar: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 8, minHeight: 44 },
+  stripNavCircle: { width: 44, height: 44, borderRadius: '50%', flexShrink: 0, background: BG_PAGE,
+    border: `1px solid ${BORDER_DEFAULT}`, color: TXT_DEFAULT, display: 'flex', alignItems: 'center',
+    justifyContent: 'center', cursor: 'pointer', padding: 0 },
+  stripNavCircleOff: { color: '#DADADA', borderColor: '#ECECEC', cursor: 'default' },
+  stripNavCenter: { flex: 1, minWidth: 0, textAlign: 'center' },
+  stripNavTitle: { fontSize: 16, fontWeight: 700, color: TXT_STRONG, lineHeight: 1.2,
+    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+  stripNavSub: { fontSize: 13, fontWeight: 500, color: TXT_SUBTLE, marginTop: 2 },
+
   listFilter: { height: 34, padding: '0 12px', borderRadius: 9999, border: `1px solid ${BORDER_DEFAULT}`,
     background: BG_PAGE, color: TXT_STRONG, fontSize: 13, fontWeight: 400, cursor: 'pointer',
     display: 'flex', alignItems: 'center', outline: 'none' },

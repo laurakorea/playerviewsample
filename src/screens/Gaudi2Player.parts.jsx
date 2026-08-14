@@ -748,10 +748,12 @@ export function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, 
               return (
                 <div key={sp.name} style={{ position: 'absolute', left: `${sp.x}%`, top: `${sp.y}%`, transform: `translate(-50%,-50%) scale(${(on ? 1.15 : 1) / zoom})`, transformOrigin: 'center center', zIndex: 5, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                   {on ? (
-                    <div style={styles.pinTooltipWrap}>
-                      <div style={{ ...styles.pinTooltip, background: ORANGE }}>{sp.name}</div>
-                      <div style={{ ...styles.pinTooltipArrow, borderTopColor: ORANGE }} />
-                    </div>
+                    sp.pinType === 'navigation' ? null : ( // navigation은 restart 핀처럼 활성 시 툴팁 숨김
+                      <div style={styles.pinTooltipWrap}>
+                        <div style={{ ...styles.pinTooltip, background: ORANGE }}>{sp.name}</div>
+                        <div style={{ ...styles.pinTooltipArrow, borderTopColor: ORANGE }} />
+                      </div>
+                    )
                   ) : (
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#2A2A2A', textShadow: '0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff', marginBottom: 2, whiteSpace: 'nowrap' }}>{sp.name}</div>
                   )}

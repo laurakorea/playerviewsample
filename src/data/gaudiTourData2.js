@@ -1641,9 +1641,9 @@ export const gaudiSubMapPins2 = {
     { "name": "내부", "pinType": "sub", "cardLabel": "실내 입장", "lat": 41.40363, "lng": 2.17436, "target": 2, "afterSeq": 13 },
     // pin 23 (start): 같은 지도(야외 floor 1)에서 재시작 = 그 지도 첫 stop(seq 1)으로.
     //   afterSeq 없음 → 경로선/순서 nav에서 제외 → "내부" 핀과 연결점 없음. targetSeq 없음 → target floor 첫 stop.
-    { "name": "출구", "pinType": "start", "cardLabel": "다음", "cardName": "지점 24", "lat": 41.4045, "lng": 2.1734, "target": 1, "targetSeq": 22, "routeGroup": "restart", "routeSeq": 21 }
+    { "name": "재시작", "pinType": "start", "cardLabel": "다음", "cardName": "지점 24", "lat": 41.4045, "lng": 2.1734, "target": 1, "targetSeq": 22, "routeGroup": "restart", "routeSeq": 21 }
   ],
   "2": [
-    { "name": "나가기", "pinType": "navigation", "cardLabel": "야외로 나가기", "x": 35, "y": 25, "target": 1, "afterSeq": 21, "targetPin": "출구" }
+    { "name": "출구로 나가기", "pinType": "navigation", "cardLabel": "출구로 나가기", "x": 35, "y": 25, "target": 1, "afterSeq": 21, "targetPin": "재시작" }
   ]
 };
