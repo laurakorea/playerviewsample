@@ -658,20 +658,32 @@ export function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, 
               <path d="M6 9L12 15L18 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </button>
-          {nameOpen && (
-            <div style={styles.mapNameMenu}>
+        </div>
+        {topRight && <div style={{ ...styles.sheetTabToggle, pointerEvents: 'auto' }}>{topRight}</div>}
+      </div>
+
+      {/* 지도 선택 — 드롭다운 대신 목차 목록과 동일한 바텀시트 */}
+      {nameOpen && (
+        <>
+          <div style={styles.dim} onClick={() => setNameOpen(false)} />
+          <div style={styles.overlaySheet}>
+            <div style={styles.overlayHandle}><div style={styles.grabber} /></div>
+            <div style={styles.overlayHeader}>
+              <span style={styles.overlayTitle}>지도</span>
+              <button style={styles.overlayClose} onClick={() => setNameOpen(false)}>✕</button>
+            </div>
+            <div style={styles.overlayBody}>
               {floors.map(f => (
                 <button key={f}
-                        style={{ ...styles.mapNameItem, ...(f === floor ? styles.mapNameItemOn : {}) }}
+                        style={{ ...styles.floorModalItem, ...(f === floor ? styles.floorModalItemOn : {}) }}
                         onClick={() => { setFloor(f); setNameOpen(false); }}>
                   {floorMaps[f]?.label ?? `${f}층`}
                 </button>
               ))}
             </div>
-          )}
-        </div>
-        {topRight && <div style={{ ...styles.sheetTabToggle, pointerEvents: 'auto' }}>{topRight}</div>}
-      </div>
+          </div>
+        </>
+      )}
 
       {isGps ? (
         <div style={{ position: 'relative', flex: 1, minHeight: 0, overflow: 'hidden', background: '#E3E3E3' }}>
