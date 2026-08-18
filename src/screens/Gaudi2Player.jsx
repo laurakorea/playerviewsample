@@ -3,6 +3,14 @@ import { orsayFloorMaps } from '../data/orsayTourData';
 import { styles, ORANGE, TXT_DEFAULT, TXT_SUBTLE, BORDER_DEFAULT } from './Gaudi2Player.styles';
 import { roomName, floorLabel, ArtCarousel, ArtImage, Controls, FloorMapView } from './Gaudi2Player.parts';
 
+// "…로/으로 이동" 조사 — 받침 없거나 ㄹ 받침이면 '로', 그 외 '으로'
+const toParticle = (word) => {
+  const ch = String(word ?? '').trim().slice(-1).charCodeAt(0);
+  if (Number.isNaN(ch) || ch < 0xac00 || ch > 0xd7a3) return '로';
+  const jong = (ch - 0xac00) % 28;
+  return jong === 0 || jong === 8 ? '로' : '으로';
+};
+
 // 스냅별 시트 높이 (뷰포트 높이 대비 %)
 //  0: 지도 닫힘 → 풀 플레이어 / 1: 지도+스트립 / 2: 지도 크게(90%)
 const SHEET_VH = [0, 65, 90];
@@ -30,7 +38,7 @@ export default function Gaudi2Player({
   // 지도 탐색 인덱스 — 핀 클릭 시 이것만 바뀌고 재생 트랙(currentIndex)은 유지됨
   const [browseIndex, setBrowseIndex] = useState(currentIndex);
   // 재생 트랙이 외부(onPrev/onNext/onSelectIndex)에 의해 변경되면 탐색도 따라감
-  useEffect(() => { setBrowseIndex(currentIndex); setSubStop(null); }, [currentIndex]);
+  useEffect(() => { setBrowseIndex(currentIndex); setSubStop(null); setMoveStep(null); }, [currentIndex]);
   // 지도보기 클릭 시 현재 핀으로 지도 센터 이동 트리거
   const [mapCenterTrigger, setMapCenterTrigger] = useState(0);
   // 지도 "열 때" 전용: 전체 핀이 보이도록 fit (트랙 이동 시의 center와 구분)
@@ -104,6 +112,10 @@ export default function Gaudi2Player({
   // afterSeq = 이 핀이 몇 번 트랙 stop "다음"에 오는지(seq). 유효 seq = afterSeq + 0.5.
   const subStopList = useMemo(() => Object.values(subMapPins || {}).flat(), [subMapPins]);
   const [subStop, setSubStop] = useState(null); // "내부"/"야외로" 같은 전환 가상 stop에 머물러 있으면 그 핀
+  // 두 stop 사이의 "이동" 단계 — pin > 이동 > pin 플로우. { from, to } (둘 다 트랙 stop)
+  const [moveStep, setMoveStep] = useState(null);
+  // 이동 단계 진입 시 지도를 해당 구간(라인)에 맞추는 트리거
+  const [segFocusTrigger, setSegFocusTrigger] = useState(0);
   const asSubStop = (sp) => ({ isSubMap: true, name: sp.name, room: sp.name, target: sp.target, afterSeq: sp.afterSeq, seq: sp.afterSeq + 0.5, pinType: sp.pinType, cardLabel: sp.cardLabel, cardName: sp.cardName, targetSeq: sp.targetSeq, targetPin: sp.targetPin });
   // 전환 후 착지할 트랙 idx: targetSeq 있으면 그 stop, 없으면 target floor의 첫 트랙.
   const transitionTargetIdx = (ss) => {
@@ -112,32 +124,45 @@ export default function Gaudi2Player({
     return s ? s.idxs[0] : null;
   };
 
-  // 이전/다음 장소(stop) — SUB_MAP 가상 stop 인식. 전환 핀 위에선 전환 체인(targetPin/targetSeq)을 따라 필과 같은 목적지를 가리킴.
-  const prevStop = useMemo(() => {
+  // 이전/다음 노드 — 3종. stop(장소) / move(장소↔장소 이동) / sub(전환 핀).
+  // 플로우: pin > 이동 > pin > 이동 … 전환 핀(내부/야외로)은 그 자체가 이동이므로 move를 끼우지 않음.
+  const stopNode = (s) => (s ? { kind: 'stop', stop: s } : null);
+  const subNode = (sp) => (sp ? { kind: 'sub', sub: asSubStop(sp) } : null);
+  // 같은 지도(층) 안의 연속 stop 사이에만 이동 단계를 둔다. 층이 다르면 라인이 없으므로 바로 이동.
+  const moveNode = (from, to) => {
+    if (!from || !to) return null;
+    if (from.floor !== to.floor) return stopNode(to);
+    return { kind: 'move', from, to };
+  };
+
+  const prevNode = useMemo(() => {
+    if (moveStep) return stopNode(moveStep.from);                                               // 이동 → 출발 장소
     if (subStop) {
-      const via = subStopList.find(x => x.targetPin === subStop.name);                         // 이 전환을 가리키는 앞 전환 핀 (시작 ← 야외로)
-      if (via) return asSubStop(via);
-      return roomStops.find(s => s.seq === subStop.afterSeq) || null;                           // 내부/야외로 → afterSeq stop
+      const via = subStopList.find(x => x.targetPin === subStop.name);                          // 이 전환을 가리키는 앞 전환 핀 (시작 ← 야외로)
+      if (via) return subNode(via);
+      return stopNode(roomStops.find(s => s.seq === subStop.afterSeq));                         // 내부/야외로 → afterSeq stop
     }
     if (!activeStop) return null;
     const landed = subStopList.find(x => x.targetSeq === activeStop.seq);                       // 이 stop으로 착지시키는 전환 (시작 → seq22)
-    if (landed) return asSubStop(landed);
+    if (landed) return subNode(landed);
     const sp = subStopList.find(x => x.afterSeq === activeStop.seq - 1);                        // 14 → 내부
-    return sp ? asSubStop(sp) : (roomStops.find(s => s.seq === activeStop.seq - 1) || null);
-  }, [subStop, activeStop, roomStops, subStopList]);
-  const nextStop = useMemo(() => {
+    if (sp) return subNode(sp);
+    return moveNode(roomStops.find(s => s.seq === activeStop.seq - 1), activeStop);             // 이전 장소 → 여기로 오는 이동
+  }, [moveStep, subStop, activeStop, roomStops, subStopList]);
+  const nextNode = useMemo(() => {
+    if (moveStep) return stopNode(moveStep.to);                                                 // 이동 → 도착 장소
     if (subStop) {
       if (subStop.targetPin) {                                                                  // 야외로 → 시작(다음 전환 핀)
-        const tp = subStopList.find(x => x.name === subStop.targetPin);
-        return tp ? asSubStop(tp) : null;
+        return subNode(subStopList.find(x => x.name === subStop.targetPin));
       }
-      if (subStop.targetSeq != null) return roomStops.find(s => s.seq === subStop.targetSeq) || null;   // 시작 → seq22
-      return roomStops.find(s => s.floor === subStop.target) || null;                           // 내부 → target floor 첫 stop
+      if (subStop.targetSeq != null) return stopNode(roomStops.find(s => s.seq === subStop.targetSeq));  // 시작 → seq22
+      return stopNode(roomStops.find(s => s.floor === subStop.target));                         // 내부 → target floor 첫 stop
     }
-    if (!activeStop) return roomStops[0] || null;
+    if (!activeStop) return stopNode(roomStops[0]);
     const sp = subStopList.find(x => x.afterSeq === activeStop.seq);                            // 13 → 내부
-    return sp ? asSubStop(sp) : (roomStops.find(s => s.seq === activeStop.seq + 1) || null);
-  }, [subStop, activeStop, roomStops, subStopList]);
+    if (sp) return subNode(sp);
+    return moveNode(activeStop, roomStops.find(s => s.seq === activeStop.seq + 1));             // 여기 → 다음 장소로 가는 이동
+  }, [moveStep, subStop, activeStop, roomStops, subStopList]);
 
   const autoPlayOnSelectRef = useRef(false);
 
@@ -169,18 +194,32 @@ export default function Gaudi2Player({
     autoPlayOnSelectRef.current = true;
     onSelectIndex(gi);
     setBrowseIndex(gi);
+    setMoveStep(null);
     setSnap(1);
   };
-  const goToStop = (s) => {                                                 // prev/next 장소 이동(로직 동일, 위계만 강등)
-    if (!s) return;
-    if (s.isSubMap) { setSubStop(s); setPinActive(true); setSnap(1); }
-    else { setSubStop(null); setBrowseIndex(s.idxs[0]); setPinActive(true); setSnap(1); setMapCenterTrigger(n => n + 1); }
+  const goNode = (node) => {                                                // prev/next 노드 이동(로직 동일, 위계만 강등)
+    if (!node) return;
+    setPinActive(true);
+    setSnap(1);
+    // 전환 핀도 '이동' 단계 — 걸어야 할 구간(현재 stop ↔ 전환 핀 ↔ 목적지)이 보이도록 맞춘다
+    if (node.kind === 'sub') { setMoveStep(null); setSubStop(node.sub); setSegFocusTrigger(n => n + 1); return; }
+    if (node.kind === 'move') {                                             // 이동 단계 — 출발 핀에 머문 채 구간 라인을 비춘다
+      setSubStop(null);
+      setMoveStep({ from: node.from, to: node.to });
+      setBrowseIndex(node.from.idxs[0]);
+      setSegFocusTrigger(n => n + 1);
+      return;
+    }
+    setSubStop(null);
+    setMoveStep(null);
+    setBrowseIndex(node.stop.idxs[0]);
+    setMapCenterTrigger(n => n + 1);
   };
   const goTransition = () => {                                             // 전환 핀 주 CTA (실내 입장/야외로/시작)
     if (!subStop) return;
     if (subStop.targetPin) {
       const tp = subStopList.find(x => x.name === subStop.targetPin);
-      if (tp) { setSubStop(asSubStop(tp)); setPinActive(true); setSnap(1); }
+      if (tp) { setSubStop(asSubStop(tp)); setPinActive(true); setSnap(1); setSegFocusTrigger(n => n + 1); }
       return;
     }
     const goIdx = transitionTargetIdx(subStop);
@@ -263,7 +302,7 @@ export default function Gaudi2Player({
   const tabToggleButtons = (
     <>
       <button style={{ ...styles.sheetTabBtn, width: 36, padding: 0, ...(tab === 'map' ? styles.sheetTabBtnOn : {}) }}
-              onClick={() => { setTab('map'); setPinActive(false); }} aria-label="지도">
+              onClick={() => { setTab('map'); setPinActive(false); setMoveStep(null); }} aria-label="지도">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M3 6L9 3L15 6L21 3V18L15 21L9 18L3 21V6Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round"/>
           <line x1="9" y1="3" x2="9" y2="18" stroke="currentColor" strokeWidth="2"/>
@@ -271,7 +310,7 @@ export default function Gaudi2Player({
         </svg>
       </button>
       <button style={{ ...styles.sheetTabBtn, width: 36, padding: 0, ...(tab === 'list' ? styles.sheetTabBtnOn : {}) }}
-              onClick={() => { setTab('list'); setPinActive(false); }} aria-label="목차">
+              onClick={() => { setTab('list'); setPinActive(false); setMoveStep(null); }} aria-label="목차">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <line x1="4" y1="6" x2="20" y2="6" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
           <line x1="4" y1="12" x2="20" y2="12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
@@ -372,7 +411,7 @@ export default function Gaudi2Player({
             <Controls big isPlaying={isPlaying} hasAudio={hasAudio} onPlay={playPause} onPrev={onPrev} onNext={onNext} onNudge={nudge} />
 
             <div style={styles.bottomBtns}>
-              <button style={styles.bottomBtn} onClick={() => { setSubStop(null); setTab('map'); setSnap(1); setBrowseIndex(currentIndex); setPinActive(true); setMapFitTrigger(n => n + 1); }}>▥ 지도보기</button>
+              <button style={styles.bottomBtn} onClick={() => { setSubStop(null); setMoveStep(null); setTab('map'); setSnap(1); setBrowseIndex(currentIndex); setPinActive(true); setMapFitTrigger(n => n + 1); }}>▥ 지도보기</button>
               <button style={styles.bottomBtn} onClick={() => { setTab('list'); setSnap(1); }}>☰ 목차보기</button>
             </div>
           </div>
@@ -455,10 +494,12 @@ export default function Gaudi2Player({
             <div style={styles.mapBox}>
               <FloorMapView artworks={artworks} currentIndex={browseIndex} playingIndex={currentIndex} roomStops={roomStops}
                             showRoute={showRoute}
-                            pinActive={pinActive && !subStop}
+                            pinActive={pinActive && !subStop && !moveStep}
                             centerTrigger={mapCenterTrigger}
                             fitTrigger={mapFitTrigger}
-                            onPinClick={(i) => { setSubStop(null); setBrowseIndex(i); setSnap(1); setPinActive(true); }}
+                            segFocusTrigger={segFocusTrigger}
+                            moveActive={!!moveStep || !!subStop}
+                            onPinClick={(i) => { setSubStop(null); setMoveStep(null); setBrowseIndex(i); setSnap(1); setPinActive(true); }}
                             onMapClick={() => { setSnap(1); setPinActive(false); }}
                             stripActive={pinActive && (!!activeStop || !!subStop)}
                             floorMaps={floorMaps} roomPins={roomPins} subMapPins={subMapPins}
@@ -466,16 +507,28 @@ export default function Gaudi2Player({
                             onSubMapActivate={(name) => {
                               if (!name) { setSubStop(null); return; }
                               const sp = subStopList.find(x => x.name === name);
-                              if (sp) { setSubStop(asSubStop(sp)); setPinActive(true); setSnap(1); }
+                              if (sp) { setMoveStep(null); setSubStop(asSubStop(sp)); setPinActive(true); setSnap(1); setSegFocusTrigger(n => n + 1); }
                             }}
                             topRight={tabToggleButtons}
                             onToggleRoute={() => setShowRoute(r => !r)} />
             </div>
 
-            {snap >= 1 && pinActive && (activeStop || subStop) && (
+            {snap >= 1 && pinActive && (activeStop || subStop || moveStep) && (
               <div style={styles.stripOverlay}>
 
-                {subStop ? (
+                {moveStep ? (
+                  /* 장소 사이 '이동' 단계 — 지도엔 구간 라인, 시트엔 도착지 안내 필 버튼 */
+                  <button style={styles.stripMoveBtn} onClick={() => goNode({ kind: 'stop', stop: moveStep.to })}>
+                    <span style={styles.stripMoveIcon}>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff" aria-hidden="true"><path d="M13.49 5.48c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm-3.6 13.9l1-4.4 2.1 2v6h2v-7.5l-2.1-2 .6-3c1.3 1.5 3.3 2.5 5.5 2.5v-2c-1.9 0-3.5-1-4.3-2.4l-1-1.6c-.4-.6-1-1-1.7-1-.3 0-.5.1-.8.1l-5.2 2.2v4.7h2v-3.4l1.8-.7-1.6 8.1-4.9-1-.4 2 7 1.4z" /></svg>
+                    </span>
+                    <span style={styles.stripMoveLabel}>
+                      {roomName(moveStep.to.room)}{toParticle(roomName(moveStep.to.room))} 이동
+                      <span style={styles.stripMoveSub}> · {moveStep.to.pinNo ?? moveStep.to.seq}번</span>
+                    </span>
+                    <span style={styles.stripMoveChev}>›</span>
+                  </button>
+                ) : subStop ? (
                   /* 이동 유도 핀 — 콘텐츠가 아니라 '이동'이므로 가로 필 버튼(썸네일 크기 X) */
                   <button style={styles.stripMoveBtn} onClick={goTransition}>
                     <span style={styles.stripMoveIcon}>
@@ -493,7 +546,7 @@ export default function Gaudi2Player({
                       {subStop.pinType === 'navigation'
                         ? subStop.name                                              // "출구로 나가기" — name이 곧 문구
                         : subStop.pinType === 'start'
-                        ? `${subStop.cardName ?? '다음 장소'}로 이동`               // "지점 24로 이동" — 다음 장소로
+                        ? `${subStop.cardName ?? '다음 장소'}${toParticle(subStop.cardName ?? '다음 장소')} 이동`   // "지점 24로 이동" — 다음 장소로
                         : `${subStop.name ?? '내부'} 입장`}                          {/* "내부 입장" — 지도(실내) 진입 */}
                     </span>
                     <span style={styles.stripMoveChev}>›</span>
@@ -538,8 +591,8 @@ export default function Gaudi2Player({
 
                 {/* 하단 이동 바 — (◯‹) 활성 핀 제목[+트랙수] (›◯). 원형 이전/다음 버튼, 없는 방향은 그레이 비활성 */}
                 <div style={styles.stripNavBar}>
-                  {prevStop ? (
-                    <button style={styles.stripNavCircle} onClick={() => goToStop(prevStop)} aria-label="이전">
+                  {prevNode ? (
+                    <button style={styles.stripNavCircle} onClick={() => goNode(prevNode)} aria-label="이전">
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 18l-6-6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
                     </button>
                   ) : (
@@ -548,11 +601,13 @@ export default function Gaudi2Player({
                     </span>
                   )}
                   <div style={styles.stripNavCenter}>
-                    <div style={styles.stripNavTitle}>{subStop ? subStop.name : roomName(activeStop?.room)}</div>
-                    {!subStop && <div style={styles.stripNavSub}>트랙 {stripIdxs.length}개</div>}
+                    <div style={styles.stripNavTitle}>
+                      {moveStep ? '이동' : subStop ? subStop.name : roomName(activeStop?.room)}
+                    </div>
+                    {!moveStep && !subStop && <div style={styles.stripNavSub}>트랙 {stripIdxs.length}개</div>}
                   </div>
-                  {nextStop ? (
-                    <button style={styles.stripNavCircle} onClick={() => goToStop(nextStop)} aria-label="다음">
+                  {nextNode ? (
+                    <button style={styles.stripNavCircle} onClick={() => goNode(nextNode)} aria-label="다음">
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 18l6-6-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
                     </button>
                   ) : (

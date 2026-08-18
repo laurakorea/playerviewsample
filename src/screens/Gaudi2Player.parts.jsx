@@ -170,12 +170,13 @@ function iwContent(text, color = ORANGE) {
   return `<div style="position:relative;display:inline-block"><div style="font-family:sans-serif;font-size:12px;font-weight:700;color:#fff;background:${color};padding:6px 10px;border-radius:6px;white-space:nowrap">${text}</div><div style="position:absolute;bottom:-6px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:6px solid ${color};"></div></div>`;
 }
 
-function GpsFloorMap({ stops, currentSeq, playingRoom, showRoute, pinActive, centerTrigger, fitTrigger = 0, onPinClick, onMapClick, locateRef, subMapPins = [], onSubMapActivate, forcedSubActive = null }) {
+function GpsFloorMap({ stops, currentSeq, playingRoom, showRoute, pinActive, centerTrigger, fitTrigger = 0, segFocusTrigger = 0, moveActive = false, onPinClick, onMapClick, locateRef, subMapPins = [], onSubMapActivate, forcedSubActive = null }) {
   const elRef = useRef(null);
   const mapRef = useRef(null);
   const markersRef = useRef([]);
   const subMapMarkersRef = useRef([]);
   const boundsRef = useRef(null); // 전체 핀을 담는 bounds (지도 열 때 fit용)
+  const autoFitOffRef = useRef(false); // 사용자 드래그/구간 focus 이후엔 컨테이너 리사이즈 자동 fit 중단
   const resizeObsRef = useRef(null);
   const routeRef = useRef(null);
   const segRouteRef = useRef(null); // 현재→다음 핀 오렌지 하이라이트 구간
@@ -187,7 +188,10 @@ function GpsFloorMap({ stops, currentSeq, playingRoom, showRoute, pinActive, cen
   const subMapPinsRef = useRef(subMapPins);
   // SUB_MAP 핀 활성 상태는 부모(subStop)가 단일 소스. forcedSubActive(=활성 핀 이름)로 내려옴.
   const forcedSubActiveRef = useRef(forcedSubActive);
-  useEffect(() => { onPinRef.current = onPinClick; onMapClickRef.current = onMapClick; onSubMapActivateRef.current = onSubMapActivate; subMapPinsRef.current = subMapPins; forcedSubActiveRef.current = forcedSubActive; });
+  // 이동 단계: 출발 핀은 비활성(지나감)으로, 구간 선은 포인트 색으로 → 시선이 '걸어야 할 선'에 모임
+  const moveActiveRef = useRef(moveActive);
+  useEffect(() => { onPinRef.current = onPinClick; onMapClickRef.current = onMapClick; onSubMapActivateRef.current = onSubMapActivate; subMapPinsRef.current = subMapPins; forcedSubActiveRef.current = forcedSubActive; moveActiveRef.current = moveActive; });
+  const stateFor = (seq) => (seq === currentSeq && !moveActive ? 'active' : seq <= currentSeq ? 'visited' : 'upcoming');
 
   // 현재(seq) → 다음(seq+1) 핀 구간의 경로 좌표. 둘 다 좌표가 있어야 함.
   const segPathFor = (seq) => {
@@ -195,13 +199,15 @@ function GpsFloorMap({ stops, currentSeq, playingRoom, showRoute, pinActive, cen
     const to = stops.find(s => s.seq === seq + 1 && s.lat != null);
     return (from && to) ? [{ lat: from.lat, lng: from.lng }, { lat: to.lat, lng: to.lng }] : [];
   };
-  // 전환 핀(예: "시작") 활성 시: 그 핀 → 목적지 구간. targetPin/targetSeq/target floor 순.
-  // 목적지가 이 지도(같은 floor)에 없으면 null → 트랙 구간으로 폴백.
+  // 전환 핀 활성 시 걸어야 할 구간.
+  //  1) 앞으로 갈 곳이 이 지도에 있으면 전환 핀 → 목적지 (재시작 → 지점24)
+  //  2) 목적지가 다른 지도(실내 등)라 그릴 수 없으면, 여기까지 오는 길 = afterSeq stop → 전환 핀 (포토스팟 → 내부)
   const activeSubSegPath = () => {
     const name = forcedSubActiveRef.current;
     if (!name) return null;
     const sp = (subMapPinsRef.current || []).find(p => p.name === name);
     if (!sp || sp.lat == null) return null;
+    const here = { lat: sp.lat, lng: sp.lng };
     let dest = null;
     if (sp.targetPin) {
       const tp = (subMapPinsRef.current || []).find(p => p.name === sp.targetPin && p.lat != null);
@@ -213,7 +219,9 @@ function GpsFloorMap({ stops, currentSeq, playingRoom, showRoute, pinActive, cen
       const st = stops.find(s => s.floor === sp.target && s.lat != null);
       dest = st ? { lat: st.lat, lng: st.lng } : null;
     }
-    return dest ? [{ lat: sp.lat, lng: sp.lng }, dest] : null;
+    if (dest) return [here, dest];
+    const from = sp.afterSeq != null ? stops.find(s => s.seq === sp.afterSeq && s.lat != null) : null;
+    return from ? [{ lat: from.lat, lng: from.lng }, here] : null;
   };
   const computeSegPath = () => activeSubSegPath() ?? segPathFor(currentSeq);
 
@@ -281,20 +289,28 @@ function GpsFloorMap({ stops, currentSeq, playingRoom, showRoute, pinActive, cen
         });
       };
       // 시트 열림 애니메이션으로 컨테이너 크기가 늦게/여러 번 확정되어도 전체 핀에 맞춰 재fit.
-      // 사용자가 지도를 직접 드래그하기 전까지만 자동 fit.
-      let userMoved = false;
+      // 사용자가 지도를 직접 드래그하거나(dragstart) 구간에 맞춘 뒤(segFocus)엔 자동 fit 중단.
+      autoFitOffRef.current = false;
       // 전환으로 진입한 전환 핀(예: 야외로→시작)이 있으면 전체 fit 대신 그 핀에 센터+확대 → 핀 인지가 쉬움.
       const focusSub = (subMapPinsRef.current || []).find(sp => sp.name === forcedSubActiveRef.current && sp.lat != null);
       if (focusSub) {
-        map.setCenter({ lat: focusSub.lat, lng: focusSub.lng });
-        map.setZoom(17);
-        userMoved = true; // 자동 전체-fit 억제
+        const segPts = computeSegPath();                 // 걸어야 할 구간이 그려지면 그 구간에 맞춤(재시작 → 지점24)
+        if (segPts.length > 1) {
+          const sb = new g.maps.LatLngBounds();
+          segPts.forEach(p => sb.extend(p));
+          map.fitBounds(sb, 72);
+          g.maps.event.addListenerOnce(map, 'idle', () => { if (map.getZoom() > 17) map.setZoom(17); });
+        } else {
+          map.setCenter({ lat: focusSub.lat, lng: focusSub.lng });
+          map.setZoom(17);
+        }
+        autoFitOffRef.current = true; // 자동 전체-fit 억제
       } else {
         fitAll();
       }
-      map.addListener('dragstart', () => { userMoved = true; });
+      map.addListener('dragstart', () => { autoFitOffRef.current = true; });
       if (typeof ResizeObserver !== 'undefined' && elRef.current) {
-        resizeObsRef.current = new ResizeObserver(() => { if (!userMoved) fitAll(); });
+        resizeObsRef.current = new ResizeObserver(() => { if (!autoFitOffRef.current) fitAll(); });
         resizeObsRef.current.observe(elRef.current);
       }
 
@@ -312,7 +328,7 @@ function GpsFloorMap({ stops, currentSeq, playingRoom, showRoute, pinActive, cen
       }).filter(Boolean);
       // 현재→다음 핀 구간: 파스텔 오렌지 실선 + 흰 화살표 (이미지 도면의 seg와 동일 색·개념)
       segRouteRef.current = new g.maps.Polyline({
-        path: computeSegPath(), map, strokeColor: SEG_COLOR, strokeOpacity: 1, strokeWeight: 8, zIndex: 2,
+        path: computeSegPath(), map, strokeColor: moveActiveRef.current ? ORANGE : SEG_COLOR, strokeOpacity: 1, strokeWeight: 8, zIndex: 2,
         icons: [{ icon: { path: g.maps.SymbolPath.FORWARD_OPEN_ARROW, strokeOpacity: 1, strokeColor: '#fff', fillOpacity: 0, scale: 1 }, offset: '50%', repeat: '24px' }],
         visible: showRoute,
       });
@@ -321,7 +337,7 @@ function GpsFloorMap({ stops, currentSeq, playingRoom, showRoute, pinActive, cen
       map.addListener('click', () => { iwRef.current?.close(); onSubMapActivateRef.current?.(null); onMapClickRef.current?.(); });
 
       markersRef.current = pts.map(s => {
-        const state = s.seq === currentSeq ? 'active' : s.seq < currentSeq ? 'visited' : 'upcoming';
+        const state = stateFor(s.seq);
         const isPlaying = s.room === playingRoom;
         const m = new g.maps.Marker({
           position: { lat: s.lat, lng: s.lng }, map,
@@ -386,14 +402,15 @@ function GpsFloorMap({ stops, currentSeq, playingRoom, showRoute, pinActive, cen
     const g = window.google, map = mapRef.current;
     if (!g || !map) return;
     markersRef.current.forEach(({ m, room, seq, pinNo }) => {
-      const state = seq === currentSeq ? 'active' : seq < currentSeq ? 'visited' : 'upcoming';
+      const state = stateFor(seq);
       const isPlaying = room === playingRoom;
       m.setIcon(isPlaying ? playingMarkerIcon(g) : (seq === 1 && state !== 'active' ? startMarkerIcon(g, state) : markerIcon(g, state)));
       m.setLabel(isPlaying || !showRoute ? null : { text: String(pinNo ?? seq), color: '#fff', fontSize: '11px', fontWeight: '700' });
       m.setZIndex(seq === currentSeq ? 99 : isPlaying ? 98 : seq);
     });
-    segRouteRef.current?.setPath(computeSegPath()); // 현재→다음 구간 갱신
-  }, [currentSeq, playingRoom, showRoute]);
+    segRouteRef.current?.setPath(computeSegPath());                                  // 현재→다음 구간 갱신
+    segRouteRef.current?.setOptions({ strokeColor: moveActive ? ORANGE : SEG_COLOR }); // 이동 중이면 포인트 색으로 강조
+  }, [currentSeq, playingRoom, showRoute, moveActive]);
 
   useEffect(() => {
     routeRef.current?.forEach(pl => pl.setVisible(showRoute));
@@ -439,6 +456,7 @@ function GpsFloorMap({ stops, currentSeq, playingRoom, showRoute, pinActive, cen
     if (forcedSubActiveRef.current) return; // 전환 핀 포커스 중엔 전체 fit로 덮어쓰지 않음 (예: 시작 핀 확대 유지)
     const map = mapRef.current, b = boundsRef.current, g = window.google;
     if (!map || !b) return;
+    autoFitOffRef.current = false; // 지도보기로 다시 열면 시트 크기 확정 후 재fit 허용
     map.fitBounds(b, 48);
     // 핀이 몇 개 안 되는 구역에서 너무 확대되지 않도록 상한
     if (g) g.maps.event.addListenerOnce(map, 'idle', () => { if (map.getZoom() > 16) map.setZoom(16); });
@@ -452,11 +470,26 @@ function GpsFloorMap({ stops, currentSeq, playingRoom, showRoute, pinActive, cen
     if (cur && cur.lat != null) map.panTo({ lat: cur.lat, lng: cur.lng });
   }, [centerTrigger, currentSeq]);
 
+  // '이동' 단계: 걸어야 할 구간(현재 핀 → 다음 핀)이 화면에 다 들어오도록 fit.
+  // 위 centerTrigger 효과보다 뒤에 선언 — 같은 커밋에서 둘 다 돌 때 구간 fit이 이긴다.
+  useEffect(() => {
+    if (!segFocusTrigger) return;
+    const g = window.google, map = mapRef.current;
+    if (!g || !map) return;
+    const path = computeSegPath();
+    if (path.length < 2) return;
+    const b = new g.maps.LatLngBounds();
+    path.forEach(p => b.extend(p));
+    autoFitOffRef.current = true; // 리사이즈 자동 전체-fit이 구간 화면을 덮어쓰지 않도록
+    map.fitBounds(b, 72);
+    g.maps.event.addListenerOnce(map, 'idle', () => { if (map.getZoom() > 17) map.setZoom(17); });
+  }, [segFocusTrigger]);
+
   return <div ref={elRef} style={{ position: 'absolute', inset: 0 }} />;
 }
 
 // 층별 이미지 도면(실내) 또는 구글지도(야외) + 순서 핀 + 경로선
-export function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, showRoute, pinActive, centerTrigger, fitTrigger = 0, stripActive, onPinClick, onMapClick, onToggleRoute, trackCard, v2, floorMaps = orsayFloorMaps, roomPins: roomPinsProp = orsayRoomPins, subMapPins, forcedSubActive = null, onSubMapActivate, topRight }) {
+export function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, showRoute, pinActive, centerTrigger, fitTrigger = 0, segFocusTrigger = 0, moveActive = false, stripActive, onPinClick, onMapClick, onToggleRoute, trackCard, v2, floorMaps = orsayFloorMaps, roomPins: roomPinsProp = orsayRoomPins, subMapPins, forcedSubActive = null, onSubMapActivate, topRight }) {
   const current = artworks[currentIndex];
   const playing = artworks[playingIndex];
   const [floor, setFloor] = useState(current.floor || 1);
@@ -555,6 +588,26 @@ export function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, 
     setZoom(targetZoom);
   }, [centerTrigger, fitTrigger]);
 
+  // '이동' 단계: 활성 핀 → 다음 지점 구간의 중간을 화면 중앙에 두고 살짝 줌아웃 → 걸어야 할 라인이 통째로 보임
+  useEffect(() => {
+    if (!segFocusTrigger) return;
+    const box = imgBoxRef.current;
+    const canvas = canvasRef.current;
+    if (!box || !canvas) return;
+    const from = pins[current.room];
+    const to = segToPos;
+    if (!from || !to) return;
+    const targetZoom = 1.6;
+    const bw = box.clientWidth;
+    const bh = box.clientHeight;
+    const cw = canvas.offsetWidth;
+    const ch = canvas.offsetHeight;
+    const midX = (bw - cw) / 2 + cw * ((from.x + to.x) / 2) / 100;
+    const midY = (bh - ch) / 2 + ch * ((from.y + to.y) / 2) / 100;
+    setPan({ x: (bw / 2 - midX) * targetZoom, y: (bh / 2 - midY) * targetZoom });
+    setZoom(targetZoom);
+  }, [segFocusTrigger]);
+
   // 현재 작품 층으로 자동 전환
   useEffect(() => { if (current.floor) setFloor(current.floor); }, [current.floor]);
   useEffect(() => { setImgErr(false); }, [floor]);
@@ -613,6 +666,8 @@ export function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, 
   const segToPos = segToStop
     ? pins[segToStop.room]
     : (floorSubMaps.find(sp => sp.afterSeq === currentSeq && sp.x != null) || null);
+  // 이동 단계에선 구간 선을 포인트 색(오렌지)으로 — 걸어야 할 라인이 화면의 주인공이 됨
+  const segColor = moveActive ? ORANGE : SEG_COLOR;
   let seg = null;
   if (segFrom && segToPos) {
     const a = pins[segFrom.room], b = segToPos;
@@ -634,6 +689,7 @@ export function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, 
   }, [currentRoom]);
 
   const pinStyle = (s, isActive) => {
+    if (s.seq === currentSeq && moveActive) return styles.pinVisited;        // 이동 중 = 출발 핀은 지나간 상태로 (선에 집중)
     if (s.seq === currentSeq && isActive && pinActive) return styles.pinOn;  // 현재 + 활성
     if (s.seq < currentSeq) return styles.pinVisited;           // 지나감
     return null;                                                 // 앞으로 or 비활성
@@ -690,6 +746,7 @@ export function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, 
           {gpsStops.length > 0 ? (
             <GpsFloorMap stops={gpsStops} currentSeq={currentSeq} playingRoom={playing?.room}
                          showRoute={showRoute} pinActive={pinActive} centerTrigger={centerTrigger} fitTrigger={fitTrigger}
+                         segFocusTrigger={segFocusTrigger} moveActive={moveActive}
                          onPinClick={onPinClick} onMapClick={onMapClick} locateRef={locateFnRef}
                          subMapPins={floorSubMaps} onSubMapActivate={onSubMapActivate}
                          forcedSubActive={forcedSubActive} />
@@ -715,7 +772,7 @@ export function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, 
                 <defs>
                   <marker id="arrowBlock" markerWidth="2" markerHeight="2" refX="1" refY="1"
                           orient="auto" markerUnits="userSpaceOnUse">
-                    <rect x="0" y="0" width="2" height="2" rx="0.2" fill={SEG_COLOR} />
+                    <rect x="0" y="0" width="2" height="2" rx="0.2" fill={segColor} />
                     <path d="M0.5,0.3 L1.6,1 L0.5,1.7" fill="none" stroke="#fff" strokeWidth="0.5"
                           strokeLinecap="round" strokeLinejoin="round" />
                   </marker>
@@ -727,7 +784,7 @@ export function FloorMapView({ artworks, currentIndex, playingIndex, roomStops, 
                 )}
                 {/* 활성 → 다음: 파스텔 오렌지 실선 + 블록 화살표 */}
                 {seg && (
-                  <polyline points={seg} fill="none" stroke={SEG_COLOR} strokeWidth="2"
+                  <polyline points={seg} fill="none" stroke={segColor} strokeWidth="2"
                             strokeLinejoin="round" strokeLinecap="round"
                             markerMid="url(#arrowBlock)" />
                 )}
