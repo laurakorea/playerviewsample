@@ -56,17 +56,21 @@ export default function StartScreen({ onStart, onStart2, onStartOrsay, onStartOr
       <button style={styles.orsayBtn} onClick={onStartOrsay}>
         🇫🇷 오르세 투어 시작하기
       </button>
+      {/* 숨김: 오르세 4차 · 지도+스크롤 투어 (#/orsay4 로 직접 접근 가능)
       <button style={styles.orsay4Btn} onClick={onStartOrsay4}>
         🗺️ 오르세 4차 · 지도+스크롤 투어
       </button>
+      */}
       <button style={styles.gaudiBtn} onClick={onStartGaudi}>
         🇪🇸 가우디 반일투어 (구글지도 + 실내도면)
       </button>
       <p style={styles.hint}>이어폰을 연결하면 더 좋아요 🎧</p>
 
+      {/* 숨김: 투어 시작하기 (#/audio 로 직접 접근 가능)
       <button style={{ ...styles.startBtn, marginTop: 28 }} onClick={onStart}>
         투어 시작하기
       </button>
+      */}
     </div>
   );
 }

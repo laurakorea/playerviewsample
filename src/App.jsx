@@ -66,8 +66,8 @@ export default function App() {
   };
 
   const handleStartGaudi = () => {
-    setGaudiIndex(0);
-    setScreen('gaudi');
+    setGaudi2Index(0);
+    setScreen('gaudi2');
   };
 
   const handleNavigate = () => {
