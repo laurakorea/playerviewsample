@@ -119,6 +119,19 @@ export default function AudioGuideScreen({ artwork, nextArtwork, artworks, plan,
             </div>
           )}
         </div>
+        {/* 재생바: 영상 하단 */}
+        <div style={styles.videoControls} onClick={e => e.stopPropagation()}>
+          <div style={styles.progressTouch} onClick={handleProgressClick}>
+            <div style={styles.progressBar}>
+              <div style={{ ...styles.progressFill, width: `${progress}%` }} />
+              <div style={{ ...styles.progressThumb, left: `${progress}%` }} />
+            </div>
+          </div>
+          <div style={styles.timeRow}>
+            <span>{formatTime(elapsed)}</span>
+            <span>{totalDisplay}</span>
+          </div>
+        </div>
       </div>
 
       {/* Body */}
@@ -126,18 +139,6 @@ export default function AudioGuideScreen({ artwork, nextArtwork, artworks, plan,
         <div style={styles.nowPlayingLabel}>{artwork.preview ? '미리듣기' : '지금 보는 작품'}</div>
         <h2 style={styles.artworkTitle}>{artwork.title}</h2>
         {artwork.subtitle && <p style={styles.artworkSubtitle}>{artwork.subtitle}</p>}
-
-        {/* Progress bar */}
-        <div style={{ ...styles.progressWrap, ...(compact ? { marginTop: 8 } : null) }}>
-          <div style={styles.progressBar} onClick={handleProgressClick}>
-            <div style={{ ...styles.progressFill, width: `${progress}%` }} />
-            <div style={{ ...styles.progressThumb, left: `${progress}%` }} />
-          </div>
-          <div style={styles.timeRow}>
-            <span>{formatTime(elapsed)}</span>
-            <span>{totalDisplay}</span>
-          </div>
-        </div>
 
         <p style={{ ...styles.description, ...(compact ? { marginTop: 8 } : null), ...(expanded ? null : styles.descriptionClamped) }}>{artwork.description}</p>
         {artwork.description.length > COLLAPSE_LEN && (
@@ -222,11 +223,12 @@ const styles = {
   nowPlayingLabel: { fontSize: 12, fontWeight: 600, color: '#4F6FE8' },
   artworkTitle: { fontSize: 22, fontWeight: 700, letterSpacing: '-0.01em', margin: '4px 0 0', color: '#1A1A2E' },
   artworkSubtitle: { fontSize: 14, color: '#666', margin: '4px 0 0' },
-  progressWrap: { width: '100%', marginTop: 16, flex: 'none' },
-  progressBar: { position: 'relative', height: 4, margin: '5px 0', background: '#E5E7EB', borderRadius: 2, cursor: 'pointer' },
+  videoControls: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: '18px 14px 8px', background: 'linear-gradient(transparent, rgba(0,0,0,0.6))' },
+  progressTouch: { height: 28, display: 'flex', alignItems: 'center', cursor: 'pointer' },
+  progressBar: { position: 'relative', width: '100%', height: 4, background: 'rgba(255,255,255,0.4)', borderRadius: 2 },
   progressFill: { position: 'absolute', top: 0, left: 0, height: '100%', background: '#4F6FE8', borderRadius: 2, transition: 'width 0.3s linear' },
-  progressThumb: { position: 'absolute', top: '50%', transform: 'translate(-50%, -50%)', width: 14, height: 14, borderRadius: '50%', background: '#4F6FE8', boxShadow: '0 0 0 3px #EEF2FF' },
-  timeRow: { display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#999', marginTop: 6 },
+  progressThumb: { position: 'absolute', top: '50%', transform: 'translate(-50%, -50%)', width: 14, height: 14, borderRadius: '50%', background: '#4F6FE8', boxShadow: '0 0 0 3px rgba(255,255,255,0.35)' },
+  timeRow: { display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 600, color: '#fff', marginTop: -2 },
   description: { flex: 'none', width: '100%', marginTop: 16, fontSize: 14, lineHeight: 1.75, textAlign: 'left', color: '#1A1A2E' },
   descriptionClamped: { display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' },
   moreBtn: { flex: 'none', padding: '8px 16px', fontSize: 13, fontWeight: 600, color: '#4F6FE8', background: 'none' },
