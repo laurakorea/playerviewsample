@@ -6,7 +6,7 @@ import { loadGoogleMaps, MAP_STYLES } from '../utils/googleMaps';
 // 확대/축소: 두 손가락 핀치, 마우스 휠, +/- 버튼. 확대 상태에서는 드래그로 이동.
 const MAX_ZOOM = 5;
 
-export function PlanMap({ src, from, to, others = [] }) {
+export function PlanMap({ src, from, to, others = [], zoomButtons = false }) {
   const [dim, setDim] = useState(null);
   const [view, setView] = useState({ s: 1, x: 0, y: 0 });
   const svgRef = useRef(null);
@@ -112,10 +112,12 @@ export function PlanMap({ src, from, to, others = [] }) {
         {a && <circle cx={a.x} cy={a.y} r={r} fill="#9CA3AF" stroke="#fff" strokeWidth={r * 0.3} />}
         {b && <circle cx={b.x} cy={b.y} r={r * 1.3} fill="#FF730D" stroke="#fff" strokeWidth={r * 0.35} />}
       </svg>
-      <div style={styles.zoomBtns}>
-        <button style={styles.zoomBtn} onClick={() => zoomCenter(1.5)} aria-label="확대">+</button>
-        <button style={styles.zoomBtn} onClick={() => zoomCenter(1 / 1.5)} aria-label="축소">−</button>
-      </div>
+      {zoomButtons && (
+        <div style={styles.zoomBtns}>
+          <button style={styles.zoomBtn} onClick={() => zoomCenter(1.5)} aria-label="확대">+</button>
+          <button style={styles.zoomBtn} onClick={() => zoomCenter(1 / 1.5)} aria-label="축소">−</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -166,7 +168,7 @@ export function FullMap({ artworks, current, next, plan, onClose }) {
     const others = places.filter(a => !same(a, current) && !same(a, next)).map(pin).filter(Boolean);
     const from = places.some(a => same(a, current)) ? pin(current) : null;
     const to = places.some(a => same(a, next)) ? pin(next) : null;
-    body = <PlanMap src={fm.src} from={from} to={to} others={others} />;
+    body = <PlanMap src={fm.src} from={from} to={to} others={others} zoomButtons />;
   } else {
     const pts = places.map(a => ({ a, c: decodeWKBPoint(a.wkb) })).filter(x => x.c).map(x => ({ lat: x.c.lat, lng: x.c.lon, title: x.a.title, a: x.a }));
     const from = pts.find(p => same(p.a, current));

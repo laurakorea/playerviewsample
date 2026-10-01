@@ -238,7 +238,6 @@ export default function App() {
         <NavigationScreen
           currentArtwork={currentArtwork}
           nextArtwork={nextArtwork}
-          artworks={artworks}
           plan={easyIsVatican ? { floorMaps: vaticanFloorMaps, roomPins: vaticanRoomPins } : null}
           onArrived={handleArrived}
           onCantFind={handleCantFind}
