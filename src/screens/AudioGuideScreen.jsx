@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { FullMap } from './FullMap';
 
-const COLLAPSE_LEN = 150; // 이보다 긴 스크립트는 5줄로 접어서 보여줌
+const COLLAPSE_LEN = 100; // 이보다 긴 스크립트는 3줄로 접어서 보여줌
+const COMPACT_HEIGHT = 740; // 이보다 낮은 화면에서는 '다음 작품' 미리보기 행을 숨겨 영상(16:9)과 3줄 스크립트 자리를 확보
 
-export default function AudioGuideScreen({ artwork, nextArtwork, artworks, plan, onSelectIndex, onNavigate, onHome, currentIndex, total }) {
+export default function AudioGuideScreen({ artwork, nextArtwork, artworks, plan, autoPlay, onSelectIndex, onNavigate, onPrev, onHome, currentIndex, total }) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [elapsed, setElapsed] = useState(0);
@@ -11,7 +12,17 @@ export default function AudioGuideScreen({ artwork, nextArtwork, artworks, plan,
   const [expanded, setExpanded] = useState(false);
   const [listOpen, setListOpen] = useState(false);
   const [mapOpen, setMapOpen] = useState(false);
+  const [compact, setCompact] = useState(false);
+  const containerRef = useRef(null);
   const videoRef = useRef(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setCompact(el.clientHeight < COMPACT_HEIGHT));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const currentRowRef = useRef(null);
 
   useEffect(() => {
@@ -19,6 +30,11 @@ export default function AudioGuideScreen({ artwork, nextArtwork, artworks, plan,
     setProgress(0);
     setElapsed(0);
     setExpanded(false);
+    // 도착/다음 트랙으로 넘어온 경우 자동 재생 (브라우저가 막으면 정지 상태로 둔다)
+    if (autoPlay && videoRef.current) {
+      videoRef.current.play().then(() => setIsPlaying(true)).catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [artwork.id]);
 
   // 목차를 열면 현재 항목이 보이도록 스크롤
@@ -68,7 +84,7 @@ export default function AudioGuideScreen({ artwork, nextArtwork, artworks, plan,
   const totalDisplay = duration > 0 ? formatTime(duration) : artwork.duration;
 
   return (
-    <div style={styles.container}>
+    <div ref={containerRef} style={styles.container}>
       {/* Header */}
       <div style={styles.header}>
         <button style={styles.iconBtn} onClick={onHome} aria-label="처음으로">✕</button>
@@ -98,41 +114,33 @@ export default function AudioGuideScreen({ artwork, nextArtwork, artworks, plan,
         />
         <div style={styles.playOverlay} onClick={handlePlayPause}>
           {!isPlaying && (
-            <div style={styles.overlayBtn}>
-              <svg width="18" height="18" viewBox="0 0 18 18"><path d="M5 3 L15 9 L5 15 Z" fill="#fff" /></svg>
+            <div style={styles.overlayBtn} aria-label="재생">
+              <svg width="26" height="26" viewBox="0 0 22 22"><path d="M7 4 L18 11 L7 18 Z" fill="#fff" /></svg>
             </div>
           )}
         </div>
-      </div>
-
-      {/* Body */}
-      <div style={styles.body}>
-        <div style={styles.nowPlayingLabel}>{artwork.preview ? '미리듣기' : '지금 보는 작품'}</div>
-        <h2 style={styles.artworkTitle}>{artwork.title}</h2>
-        {artwork.subtitle && <p style={styles.artworkSubtitle}>{artwork.subtitle}</p>}
-
-        {/* Progress bar */}
-        <div style={styles.progressWrap}>
-          <div style={styles.progressBar} onClick={handleProgressClick}>
-            <div style={{ ...styles.progressFill, width: `${progress}%` }} />
-            <div style={{ ...styles.progressThumb, left: `${progress}%` }} />
+        {/* 재생바: 영상 하단 */}
+        <div style={styles.videoControls} onClick={e => e.stopPropagation()}>
+          <div style={styles.progressTouch} onClick={handleProgressClick}>
+            <div style={styles.progressBar}>
+              <div style={{ ...styles.progressFill, width: `${progress}%` }} />
+              <div style={{ ...styles.progressThumb, left: `${progress}%` }} />
+            </div>
           </div>
           <div style={styles.timeRow}>
             <span>{formatTime(elapsed)}</span>
             <span>{totalDisplay}</span>
           </div>
         </div>
+      </div>
 
-        {/* Controls */}
-        <button style={styles.playBtn} onClick={handlePlayPause} aria-label={isPlaying ? '일시정지' : '재생'}>
-          {isPlaying ? (
-            <svg width="22" height="22" viewBox="0 0 22 22"><path d="M6 4h4v14H6zM12 4h4v14h-4z" fill="#fff" /></svg>
-          ) : (
-            <svg width="22" height="22" viewBox="0 0 22 22"><path d="M7 4 L18 11 L7 18 Z" fill="#fff" /></svg>
-          )}
-        </button>
+      {/* Body */}
+      <div style={{ ...styles.body, ...(compact ? styles.bodyCompact : null) }}>
+        <div style={styles.nowPlayingLabel}>{artwork.preview ? '미리듣기' : '지금 보는 작품'}</div>
+        <h2 style={styles.artworkTitle}>{artwork.title}</h2>
+        {artwork.subtitle && <p style={styles.artworkSubtitle}>{artwork.subtitle}</p>}
 
-        <p style={{ ...styles.description, ...(expanded ? null : styles.descriptionClamped) }}>{artwork.description}</p>
+        <p style={{ ...styles.description, ...(compact ? { marginTop: 8 } : null), ...(expanded ? null : styles.descriptionClamped) }}>{artwork.description}</p>
         {artwork.description.length > COLLAPSE_LEN && (
           <button style={styles.moreBtn} onClick={() => setExpanded(e => !e)}>{expanded ? '접기' : '더보기'}</button>
         )}
@@ -141,7 +149,7 @@ export default function AudioGuideScreen({ artwork, nextArtwork, artworks, plan,
       {/* Next artwork */}
       {nextArtwork ? (
         <div style={styles.nextSection}>
-          <div style={styles.nextInfo}>
+          {!compact && <div style={styles.nextInfo}>
             <img
               src={nextArtwork.imageSrc}
               alt={nextArtwork.title}
@@ -153,10 +161,13 @@ export default function AudioGuideScreen({ artwork, nextArtwork, artworks, plan,
               <span style={styles.nextTitle}>{nextArtwork.title}</span>
               {nextArtwork.subtitle && <span style={styles.nextSub}>{nextArtwork.subtitle}</span>}
             </div>
+          </div>}
+          <div style={styles.actionRow}>
+            <button style={{ ...styles.prevBtn, opacity: onPrev ? 1 : 0.4 }} onClick={onPrev ?? undefined} disabled={!onPrev}>‹ 이전</button>
+            <button style={styles.navigateBtn} onClick={onNavigate}>
+              {nextArtwork.preview ? '다음 미리듣기 →' : '다음 작품으로 이동 →'}
+            </button>
           </div>
-          <button style={styles.navigateBtn} onClick={onNavigate}>
-            {nextArtwork.preview ? '다음 미리듣기 →' : '다음 작품으로 이동 →'}
-          </button>
         </div>
       ) : (
         <div style={styles.nextSection}>
@@ -203,22 +214,23 @@ const styles = {
   headerTitle: { flex: 1, minWidth: 0, height: 44, textAlign: 'center', fontSize: 16, fontWeight: 700, color: '#1A1A2E', background: 'none', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
   mapIconWrap: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 },
   mapIconLabel: { fontSize: 11, fontWeight: 700 },
-  mediaBox: { position: 'relative', width: '100%', flex: '0 100 220px', minHeight: 100, background: '#111', overflow: 'hidden' }, // 낮은 화면에선 본문보다 먼저 줄어듦
+  mediaBox: { position: 'relative', width: '100%', flex: 'none', aspectRatio: '16 / 9', background: '#111', overflow: 'hidden' }, // 항상 16:9
   video: { width: '100%', height: '100%', objectFit: 'cover' },
   playOverlay: { position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' },
-  overlayBtn: { width: 48, height: 48, borderRadius: '50%', background: 'rgba(255,255,255,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  overlayBtn: { width: 64, height: 64, borderRadius: '50%', background: 'rgba(30,42,90,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center' },
   body: { flex: '1 1 auto', minHeight: 0, overflowY: 'auto', padding: '16px 20px 8px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }, // 더보기로 펼쳤을 때만 이 영역 안에서 스크롤
+  bodyCompact: { padding: '8px 20px 4px' },
   nowPlayingLabel: { fontSize: 12, fontWeight: 600, color: '#4F6FE8' },
   artworkTitle: { fontSize: 22, fontWeight: 700, letterSpacing: '-0.01em', margin: '4px 0 0', color: '#1A1A2E' },
   artworkSubtitle: { fontSize: 14, color: '#666', margin: '4px 0 0' },
-  progressWrap: { width: '100%', marginTop: 16, flex: 'none' },
-  progressBar: { position: 'relative', height: 4, margin: '5px 0', background: '#E5E7EB', borderRadius: 2, cursor: 'pointer' },
+  videoControls: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: '18px 14px 8px', background: 'linear-gradient(transparent, rgba(0,0,0,0.6))' },
+  progressTouch: { height: 28, display: 'flex', alignItems: 'center', cursor: 'pointer' },
+  progressBar: { position: 'relative', width: '100%', height: 4, background: 'rgba(255,255,255,0.4)', borderRadius: 2 },
   progressFill: { position: 'absolute', top: 0, left: 0, height: '100%', background: '#4F6FE8', borderRadius: 2, transition: 'width 0.3s linear' },
-  progressThumb: { position: 'absolute', top: '50%', transform: 'translate(-50%, -50%)', width: 14, height: 14, borderRadius: '50%', background: '#4F6FE8', boxShadow: '0 0 0 3px #EEF2FF' },
-  timeRow: { display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#999', marginTop: 6 },
-  playBtn: { flex: 'none', width: 64, height: 64, borderRadius: '50%', background: '#1E2A5A', display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 4 },
+  progressThumb: { position: 'absolute', top: '50%', transform: 'translate(-50%, -50%)', width: 14, height: 14, borderRadius: '50%', background: '#4F6FE8', boxShadow: '0 0 0 3px rgba(255,255,255,0.35)' },
+  timeRow: { display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 600, color: '#fff', marginTop: -2 },
   description: { flex: 'none', width: '100%', marginTop: 16, fontSize: 14, lineHeight: 1.75, textAlign: 'left', color: '#1A1A2E' },
-  descriptionClamped: { display: '-webkit-box', WebkitLineClamp: 5, WebkitBoxOrient: 'vertical', overflow: 'hidden' },
+  descriptionClamped: { display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' },
   moreBtn: { flex: 'none', padding: '8px 16px', fontSize: 13, fontWeight: 600, color: '#4F6FE8', background: 'none' },
   nextSection: { flex: 'none', marginTop: 'auto', borderTop: '1px solid #F0F0F0', padding: '14px 20px 24px', display: 'flex', flexDirection: 'column', gap: 12 },
   nextInfo: { display: 'flex', alignItems: 'center', gap: 12 },
@@ -227,7 +239,9 @@ const styles = {
   nextLabel: { fontSize: 12, color: '#999' },
   nextTitle: { fontSize: 16, fontWeight: 700, color: '#1A1A2E' },
   nextSub: { fontSize: 13, color: '#666', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
-  navigateBtn: { height: 56, borderRadius: 16, background: '#4F6FE8', color: '#fff', fontSize: 17, fontWeight: 700, width: '100%' },
+  actionRow: { display: 'flex', gap: 8 },
+  prevBtn: { flex: 'none', width: 88, height: 56, borderRadius: 16, background: '#F2F4F7', color: '#1A1A2E', fontSize: 16, fontWeight: 700 },
+  navigateBtn: { flex: 1, minWidth: 0, height: 56, borderRadius: 16, background: '#4F6FE8', color: '#fff', fontSize: 17, fontWeight: 700 },
   completeMsg: { textAlign: 'center', fontSize: 18, fontWeight: 600, color: '#4F6FE8', padding: '20px 0' },
   // 목차 시트
   dim: { position: 'absolute', inset: 0, zIndex: 10, background: 'rgba(26,26,46,0.55)', display: 'flex', alignItems: 'flex-end' },

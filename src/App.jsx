@@ -17,6 +17,7 @@ import OrsayFeed from './screens/OrsayFeed';
 export default function App() {
   const [screen, setScreen] = useState('start');
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [autoPlay, setAutoPlay] = useState(false); // 쉬운모드: 다음 트랙으로 넘어오면 자동 재생
   const [orsayIndex, setOrsayIndex] = useState(0);
   const orsayArtworks = orsayTourData.artworks;
   const [gaudiIndex, setGaudiIndex] = useState(0);
@@ -53,6 +54,7 @@ export default function App() {
 
   const handleStart = () => {
     setEasyTour('gyeongbok');
+    setAutoPlay(false);
     setCurrentIndex(0);
     setScreen('audio');
   };
@@ -84,24 +86,36 @@ export default function App() {
 
   const handleStartVaticanEasy = () => {
     setEasyTour('vatican');
+    setAutoPlay(false);
     setCurrentIndex(0);
     setScreen('audio');
   };
 
   const handleNavigate = () => {
     if (nextArtwork?.preview) {                 // 미리듣기 트랙은 장소 이동 없이 바로 이어서
+      setAutoPlay(true);
       setCurrentIndex(i => i + 1);
       return;
     }
     setScreen('navigate');
   };
 
+  // 이전: 직전 화면으로. 장소 오디오(i)의 직전 화면은 이동 화면(i-1 → i), 미리듣기는 앞 트랙 오디오.
+  const handlePrevAudio = () => {
+    if (currentIndex === 0) return;
+    setAutoPlay(false);
+    setCurrentIndex(i => i - 1);
+    setScreen(currentArtwork.preview ? 'audio' : 'navigate');
+  };
+
   const handleArrived = () => {
+    setAutoPlay(true);
     setCurrentIndex(i => i + 1);
     setScreen('audio');
   };
 
   const handleCantFind = () => {
+    setAutoPlay(true);
     setCurrentIndex(i => i + 1);
     setScreen('audio');
   };
@@ -211,8 +225,10 @@ export default function App() {
           nextArtwork={nextArtwork}
           artworks={artworks}
           plan={easyIsVatican ? { floorMaps: vaticanFloorMaps, roomPins: vaticanRoomPins } : null}
-          onSelectIndex={setCurrentIndex}
+          autoPlay={autoPlay}
+          onSelectIndex={(i) => { setAutoPlay(true); setCurrentIndex(i); }}
           onNavigate={handleNavigate}
+          onPrev={currentIndex > 0 ? handlePrevAudio : null}
           onHome={() => setScreen('start')}
           currentIndex={currentIndex}
           total={artworks.length}
@@ -222,10 +238,10 @@ export default function App() {
         <NavigationScreen
           currentArtwork={currentArtwork}
           nextArtwork={nextArtwork}
-          artworks={artworks}
           plan={easyIsVatican ? { floorMaps: vaticanFloorMaps, roomPins: vaticanRoomPins } : null}
           onArrived={handleArrived}
           onCantFind={handleCantFind}
+          onBack={() => setScreen('audio')}
           onHome={() => setScreen('start')}
         />
       )}
