@@ -1,36 +1,36 @@
 import { useEffect, useRef, useMemo, useState } from 'react';
 import { decodeWKBPoint, distanceMeters, formatDistance } from '../utils/geo';
 
-const MAPS_API_KEY = 'AIzaSyA08FbqWiPl8VfF8aDcP9yhgCCJj6EqU58';
+import { loadGoogleMaps, MAP_STYLES } from '../utils/googleMaps';
+import { FullMap, PlanMap } from './FullMap';
 
-let mapsPromise = null;
-function loadGoogleMaps() {
-  if (window.google?.maps) return Promise.resolve();
-  if (mapsPromise) return mapsPromise;
-  mapsPromise = new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${MAPS_API_KEY}`;
-    script.async = true;
-    script.onload = resolve;
-    script.onerror = reject;
-    document.head.appendChild(script);
-  });
-  return mapsPromise;
+// 길 안내 영상: 지도 오른쪽 아래 작은 창. 탭하면 지도 위에서 크게 커지며 재생, 축소 버튼으로 다시 작아진다.
+function GuideVideo({ src }) {
+  const ref = useRef(null);
+  const [big, setBig] = useState(false);
+  useEffect(() => {
+    const v = ref.current;
+    if (!v) return;
+    if (big) v.play().catch(() => {}); else v.pause();
+  }, [big]);
+  return (
+    <div style={big ? styles.videoBig : styles.videoPip} onClick={big ? undefined : () => setBig(true)}>
+      <video ref={ref} src={`${src}#t=0.1`} style={styles.videoEl} playsInline preload="metadata" controls={big} />
+      {big
+        ? <button style={styles.videoShrink} onClick={() => setBig(false)} aria-label="영상 작게">✕ 작게</button>
+        : <span style={styles.videoPipLabel}>▶ 길 영상</span>}
+    </div>
+  );
 }
 
-const MAP_STYLES = [
-  { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
-  { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-  { featureType: 'road', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
-];
-
-export default function NavigationScreen({ currentArtwork, nextArtwork, onArrived, onCantFind, onBack, onHome }) {
+export default function NavigationScreen({ currentArtwork, nextArtwork, artworks = [], plan, onArrived, onCantFind, onHome }) {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const currMarkerRef = useRef(null);
   const dirRendererRef = useRef(null);
   const [locating, setLocating] = useState(false);
   const [distDisplay, setDistDisplay] = useState(null);
+  const [fullMapOpen, setFullMapOpen] = useState(false);
 
   const currentCoord = useMemo(() => decodeWKBPoint(currentArtwork?.wkb), [currentArtwork?.wkb]);
   const nextCoord    = useMemo(() => decodeWKBPoint(nextArtwork?.wkb),    [nextArtwork?.wkb]);
@@ -237,170 +237,123 @@ export default function NavigationScreen({ currentArtwork, nextArtwork, onArrive
     );
   }
 
+  // 실내(도면) 목적지: 같은 도면에 출발 핀이 있으면 함께 표시
+  const planFloor = plan && nextArtwork?.floor ? plan.floorMaps[nextArtwork.floor] : null;
+  const planTo = planFloor?.kind === 'image' ? plan.roomPins[nextArtwork.floor]?.[nextArtwork.room] : null;
+  const planFrom = planTo && currentArtwork?.floor === nextArtwork.floor ? plan.roomPins[currentArtwork.floor]?.[currentArtwork.room] : null;
+
   const displayDist = distDisplay ?? (distM ? formatDistance(distM) : null);
 
+  const isIndoor = !!planTo;
+  const move = currentArtwork?.moveTrack;
+  // 길 안내 영상: 이동 트랙 영상이 있으면 그것, 없으면 도착할 장소 트랙의 영상
+  const guide = move?.videoSrc ? move : nextArtwork?.videoSrc ? nextArtwork : null;
+  const [mm, ss] = (move?.duration ?? '').split(':').slice(1).map(Number);
+  const moveSecs = move?.duration ? (mm || 0) * 60 + (ss || 0) : 0;
+  const moveSpoken = moveSecs >= 60 ? `약 ${Math.round(moveSecs / 60)}분` : moveSecs > 0 ? `약 ${moveSecs}초` : '';
+  const headerSub = moveSpoken || (isIndoor ? '' : displayDist ?? '');
+
+  // 이동 화면은 실내/야외 구분 없이 같은 구조: 주황 헤더 · 지도(+길 영상 작은 창) · 경로 카드 · 도착 버튼
   return (
     <div style={styles.container}>
       <div style={styles.header}>
-        <button style={styles.backBtn} onClick={onBack}>‹</button>
-        <span style={styles.headerTitle}>작품으로 이동</span>
-        <button style={styles.closeBtn} onClick={onHome}>✕</button>
+        <button style={styles.iconBtn} onClick={onHome} aria-label="처음으로">✕</button>
+        <div style={styles.headerTitle}>{nextArtwork?.title}까지{headerSub ? ` · ${headerSub}` : ''}</div>
+        <button style={styles.iconBtn} onClick={() => setFullMapOpen(true)} aria-label="전체 지도">
+          <span style={styles.mapIconWrap}>
+            <svg width="20" height="20" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"><path d="M2 4l4.5-2 5 2 4.5-2v12l-4.5 2-5-2L2 16z" /><path d="M6.5 2v12M11.5 4v12" /></svg>
+            <span style={styles.mapIconLabel}>지도</span>
+          </span>
+        </button>
       </div>
 
-      {/* Google Map */}
       <div style={styles.mapWrap}>
-        <div ref={mapRef} style={styles.mapBox} />
-        {/* 현재 위치 버튼 */}
-        <button
-          style={{ ...styles.locateBtn, opacity: locating ? 0.6 : 1 }}
-          onClick={handleLocate}
-          disabled={locating}
-          title="현재 위치 찾기"
-        >
-          {locating ? (
-            <span style={styles.locateSpinner}>⟳</span>
-          ) : (
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-              <circle cx="12" cy="12" r="3.5" fill="#4F6FE8"/>
-              <circle cx="12" cy="12" r="7" stroke="#4F6FE8" strokeWidth="2" fill="none"/>
-              <line x1="12" y1="2" x2="12" y2="5" stroke="#4F6FE8" strokeWidth="2" strokeLinecap="round"/>
-              <line x1="12" y1="19" x2="12" y2="22" stroke="#4F6FE8" strokeWidth="2" strokeLinecap="round"/>
-              <line x1="2" y1="12" x2="5" y2="12" stroke="#4F6FE8" strokeWidth="2" strokeLinecap="round"/>
-              <line x1="19" y1="12" x2="22" y2="12" stroke="#4F6FE8" strokeWidth="2" strokeLinecap="round"/>
-            </svg>
-          )}
-        </button>
+        {isIndoor ? <PlanMap src={planFloor.src} from={planFrom} to={planTo} onClick={() => setFullMapOpen(true)} /> : <div ref={mapRef} style={styles.mapBox} />}
+        {guide && <GuideVideo key={guide.videoSrc} src={guide.videoSrc} />}
+        {/* 현재 위치 버튼 (도면에서는 숨김) */}
+        {!isIndoor && (
+          <button style={{ ...styles.locateBtn, opacity: locating ? 0.6 : 1 }} onClick={handleLocate} disabled={locating} title="현재 위치 찾기">
+            {locating ? (
+              <span style={styles.locateSpinner}>⟳</span>
+            ) : (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="3.5" fill="#4F6FE8"/>
+                <circle cx="12" cy="12" r="7" stroke="#4F6FE8" strokeWidth="2" fill="none"/>
+                <line x1="12" y1="2" x2="12" y2="5" stroke="#4F6FE8" strokeWidth="2" strokeLinecap="round"/>
+                <line x1="12" y1="19" x2="12" y2="22" stroke="#4F6FE8" strokeWidth="2" strokeLinecap="round"/>
+                <line x1="2" y1="12" x2="5" y2="12" stroke="#4F6FE8" strokeWidth="2" strokeLinecap="round"/>
+                <line x1="19" y1="12" x2="22" y2="12" stroke="#4F6FE8" strokeWidth="2" strokeLinecap="round"/>
+              </svg>
+            )}
+          </button>
+        )}
       </div>
 
-      {/* 하단 카드 */}
-      <div style={styles.bottomCard}>
-        <div style={styles.arrivalHint}>도착하면 눌러주세요</div>
-        <h2 style={styles.destTitle}>{nextArtwork?.title}</h2>
-        <p style={styles.destSub}>
-          {displayDist ? `${displayDist} 이동` : nextArtwork?.subtitle}
-        </p>
-        <button style={styles.arrivedBtn} onClick={onArrived}>
-          도착했어요 · 재생하기 ▶
-        </button>
-        <button style={styles.cantFindBtn} onClick={onCantFind}>
-          못 찾겠어요
-        </button>
+      <div style={styles.steps}>
+        {move && (
+          <div style={styles.stepActive}>
+            <div style={styles.stepIcon}>🧭</div>
+            <div style={styles.stepText}>
+              <span style={styles.stepTitle}>{currentArtwork.title} → {nextArtwork?.title}</span>
+              {move.description && <span style={styles.stepSub}>{move.description}</span>}
+            </div>
+          </div>
+        )}
+        <div style={styles.stepRow}>
+          <div style={{ ...styles.stepIcon, background: '#FFE3CF' }}><span style={styles.destDot} /></div>
+          <div style={styles.stepText}>
+            <span style={styles.stepRowTitle}>도착 · {nextArtwork?.title}</span>
+            {(!isIndoor && displayDist ? `${displayDist} 이동` : nextArtwork?.subtitle) && (
+              <span style={styles.stepRowSub}>{!isIndoor && displayDist ? `${displayDist} 이동` : nextArtwork?.subtitle}</span>
+            )}
+          </div>
+        </div>
       </div>
+      <div style={styles.bottomIndoor}>
+        <div style={styles.hintRow}>
+          <span style={styles.hint}>도착하면 눌러주세요</span>
+          <button style={styles.cantFindLink} onClick={onCantFind}>못 찾겠어요</button>
+        </div>
+        <button style={styles.arrivedBtn} onClick={onArrived}>도착했어요 · 재생하기 ▶</button>
+      </div>
+
+      {fullMapOpen && <FullMap artworks={artworks} current={currentArtwork} next={nextArtwork} plan={plan} onClose={() => setFullMapOpen(false)} />}
     </div>
   );
 }
 
 const styles = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    minHeight: '100vh',
-    background: '#fff',
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: '14px 20px',
-    borderBottom: '1px solid #F0F0F0',
-    zIndex: 1,
-    background: '#fff',
-  },
-  backBtn: {
-    background: 'none',
-    fontSize: 28,
-    color: '#555',
-    width: 36,
-    height: 36,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    fontSize: 16,
-    fontWeight: 600,
-    color: '#1a1a2e',
-  },
-  closeBtn: {
-    background: 'none',
-    fontSize: 18,
-    color: '#aaa',
-    width: 36,
-    height: 36,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mapWrap: {
-    flex: 1,
-    position: 'relative',
-    minHeight: 320,
-  },
-  mapBox: {
-    position: 'absolute',
-    inset: 0,
-    background: '#E8EAF0',
-  },
+  container: { position: 'relative', display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden', background: '#fff' },
+  header: { height: 64, flex: 'none', display: 'flex', alignItems: 'center', padding: '0 8px', gap: 4, background: '#FF730D' },
+  iconBtn: { width: 44, height: 44, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#1A1A2E', background: 'none' },
+  headerTitle: { flex: 1, minWidth: 0, textAlign: 'center', fontSize: 17, fontWeight: 700, color: '#1A1A2E', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+  mapIconWrap: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 },
+  mapIconLabel: { fontSize: 11, fontWeight: 700 },
+  videoBig: { position: 'absolute', left: 12, right: 12, bottom: 12, zIndex: 2, aspectRatio: '16 / 9', borderRadius: 12, overflow: 'hidden', background: '#000', border: '2px solid #fff', boxShadow: '0 4px 16px rgba(26,26,46,0.35)' },
+  videoShrink: { position: 'absolute', top: 8, right: 8, zIndex: 3, height: 32, padding: '0 12px', borderRadius: 16, background: 'rgba(0,0,0,0.55)', color: '#fff', fontSize: 13, fontWeight: 700 },
+  videoEl: { width: '100%', height: '100%', objectFit: 'cover', display: 'block' },
+  videoPip: { position: 'absolute', right: 12, bottom: 12, zIndex: 2, width: 120, height: 80, borderRadius: 12, overflow: 'hidden', background: '#111', border: '2px solid #fff', boxShadow: '0 4px 12px rgba(26,26,46,0.25)', cursor: 'pointer' },
+  videoPipLabel: { position: 'absolute', left: 6, bottom: 6, fontSize: 12, fontWeight: 700, color: '#fff', background: 'rgba(0,0,0,0.45)', padding: '3px 6px', borderRadius: 6 },
+  mapWrap: { flex: 1, minHeight: 180, position: 'relative', background: '#F1F3F6' },
+  mapBox: { position: 'absolute', inset: 0, width: '100%', height: '100%', background: '#E8EAF0' },
   locateBtn: {
-    position: 'absolute',
-    bottom: 16,
-    right: 16,
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    background: '#fff',
-    boxShadow: '0 2px 10px rgba(0,0,0,0.18)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10,
-    cursor: 'pointer',
-    border: 'none',
+    position: 'absolute', top: 12, right: 12, width: 44, height: 44, borderRadius: '50%', background: '#fff',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center',
   },
-  locateSpinner: {
-    fontSize: 22,
-    color: '#4F6FE8',
-    display: 'inline-block',
-    animation: 'spin 1s linear infinite',
-  },
-  bottomCard: {
-    padding: '22px 24px 40px',
-    borderTop: '1px solid #F0F0F0',
-    background: '#fff',
-  },
-  arrivalHint: {
-    fontSize: 13,
-    color: '#999',
-    marginBottom: 6,
-  },
-  destTitle: {
-    fontSize: 24,
-    fontWeight: 700,
-    color: '#1a1a2e',
-    marginBottom: 6,
-  },
-  destSub: {
-    fontSize: 13,
-    color: '#888',
-    marginBottom: 22,
-  },
-  arrivedBtn: {
-    width: '100%',
-    padding: '17px',
-    borderRadius: 14,
-    background: '#4F6FE8',
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 700,
-    boxShadow: '0 4px 16px rgba(79,111,232,0.3)',
-    marginBottom: 12,
-  },
-  cantFindBtn: {
-    width: '100%',
-    padding: '14px',
-    borderRadius: 14,
-    background: '#F8F9FB',
-    color: '#888',
-    fontSize: 15,
-  },
+  locateSpinner: { fontSize: 20, color: '#4F6FE8' },
+  steps: { flex: 'none', borderTop: '1px solid #F0F0F0', padding: '8px 12px 0', display: 'flex', flexDirection: 'column' },
+  stepActive: { minHeight: 64, display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', borderRadius: 14, background: '#EEF2FF' },
+  stepRow: { minHeight: 60, display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px' },
+  stepIcon: { width: 40, height: 40, flex: 'none', borderRadius: 12, background: '#4F6FE8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 },
+  destDot: { width: 14, height: 14, borderRadius: '50%', background: '#FF730D', boxShadow: '0 0 0 3px #fff' },
+  stepText: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 },
+  stepTitle: { fontSize: 17, fontWeight: 700, color: '#1A1A2E' },
+  stepSub: { fontSize: 14, color: '#444', display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' },
+  stepRowTitle: { fontSize: 16, fontWeight: 600, color: '#1A1A2E' },
+  stepRowSub: { fontSize: 14, color: '#666' },
+  bottomIndoor: { flex: 'none', padding: '8px 20px 24px', display: 'flex', flexDirection: 'column', gap: 4 },
+  hintRow: { height: 40, display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
+  hint: { fontSize: 14, color: '#666' },
+  cantFindLink: { height: 40, padding: 0, background: 'none', fontSize: 15, fontWeight: 600, color: '#444', textDecoration: 'underline', textUnderlineOffset: 3 },
+  arrivedBtn: { height: 56, borderRadius: 16, background: '#4F6FE8', color: '#fff', fontSize: 17, fontWeight: 700, width: '100%' },
 };
