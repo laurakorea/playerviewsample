@@ -1,6 +1,6 @@
 import { tourData } from '../data/tourData';
 
-export default function StartScreen({ onStart, onStart2, onStartOrsay, onStartOrsay4, onStartGaudi }) {
+export default function StartScreen({ onStart, onStart2, onStartOrsay, onStartOrsay4, onStartGaudi, onStartVatican, onStartVaticanEasy }) {
   const { artworks } = tourData;
   const totalMin = artworks.reduce((sum, a) => {
     const m = a.duration.match(/(\d+):(\d+):(\d+)/);
@@ -62,6 +62,12 @@ export default function StartScreen({ onStart, onStart2, onStartOrsay, onStartOr
       <button style={styles.gaudiBtn} onClick={onStartGaudi}>
         🇪🇸 가우디 반일투어 (구글지도 + 실내도면)
       </button>
+      <button style={styles.vaticanEasyBtn} onClick={onStartVaticanEasy}>
+        🔰 바티칸 쉬운 가이드
+      </button>
+      <button style={styles.vaticanBtn} onClick={onStartVatican}>
+        바티칸 반일투어(지도형)
+      </button>
       <p style={styles.hint}>이어폰을 연결하면 더 좋아요 🎧</p>
 
       <button style={{ ...styles.startBtn, marginTop: 28 }} onClick={onStart}>
@@ -76,13 +82,14 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    padding: '40px 24px 40px',
-    minHeight: '100%',
+    padding: '24px 24px 20px',
+    height: '100%',
+    overflow: 'hidden',
     background: '#fff',
   },
   header: {
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 12,
   },
   badge: {
     display: 'inline-block',
@@ -107,11 +114,12 @@ const styles = {
   },
   heroBox: {
     width: '100%',
-    height: 160,
+    flex: '1 1 160px', // 화면이 낮으면 줄어들어 스크롤 방지
+    minHeight: 40,
     borderRadius: 16,
     overflow: 'hidden',
     background: '#EEF2FF',
-    marginBottom: 20,
+    marginBottom: 14,
   },
   heroImg: {
     width: '100%',
@@ -123,7 +131,8 @@ const styles = {
     background: '#F8F9FB',
     borderRadius: 16,
     padding: '6px 16px',
-    marginBottom: 22,
+    marginBottom: 14,
+    flexShrink: 0,
     display: 'flex',
     alignItems: 'center',
   },
@@ -140,7 +149,7 @@ const styles = {
   divider: { width: 1, height: 32, background: '#E5E7EB' },
   startBtn: {
     width: '100%',
-    padding: '18px',
+    padding: '14px',
     borderRadius: 16,
     background: '#4F6FE8',
     color: '#fff',
@@ -151,7 +160,7 @@ const styles = {
   },
   startBtn2: {
     width: '100%',
-    padding: '18px',
+    padding: '14px',
     borderRadius: 16,
     background: '#fff',
     color: '#4F6FE8',
@@ -162,7 +171,7 @@ const styles = {
   },
   orsayBtn: {
     width: '100%',
-    padding: '18px',
+    padding: '14px',
     borderRadius: 16,
     background: '#1a1a2e',
     color: '#fff',
@@ -173,7 +182,7 @@ const styles = {
   },
   orsay4Btn: {
     width: '100%',
-    padding: '18px',
+    padding: '14px',
     borderRadius: 16,
     background: '#FF730D',
     color: '#fff',
@@ -184,13 +193,34 @@ const styles = {
   },
   gaudiBtn: {
     width: '100%',
-    padding: '18px',
+    padding: '14px',
     borderRadius: 16,
     background: '#C1121F',
     color: '#fff',
     fontSize: 17,
     fontWeight: 700,
     boxShadow: '0 4px 16px rgba(193,18,31,0.3)',
+    marginBottom: 12,
+  },
+  vaticanEasyBtn: {
+    width: '100%',
+    height: 56,
+    borderRadius: 16,
+    background: '#7A5C00',
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: 700,
+    marginBottom: 12,
+  },
+  vaticanBtn: {
+    width: '100%',
+    height: 52,
+    borderRadius: 16,
+    background: '#fff',
+    color: '#7A5C00',
+    fontSize: 16,
+    fontWeight: 600,
+    border: '1px solid #E5D9B8',
     marginBottom: 12,
   },
   hint: {
